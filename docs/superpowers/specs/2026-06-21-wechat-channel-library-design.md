@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-21
 **状态**: 设计确认,待实施规划
-**取代范围**: 现有 `src/` 的整块 CLI bot 实现,被拆为两个 npm 包
+**取代范围**: 现有 `src/` 的整块 CLI bot 实现
 
 ---
 
@@ -17,23 +17,30 @@
 - `MEDIA:` 指令、`streaming.ts` 增量推送、`markdown-filter.ts` 都是 Claude 输出端的特化逻辑
 - `state/` 下三份 JSON 文件存储 (`sessions.json` / `context-tokens.json` / `sync-buf.json`) 也是为这个 bot 量身定做
 
-**与初衷的偏差**: 一开始想做的是**给其他项目用的开源通道组件**——别人 `npm install` 进来就能把自己的 agent(Claude / GPT / 本地模型 / RAG / 业务系统)接到微信上。
+**与初衷的偏差**: 一开始想做的是**给其他项目用的开源桥接工具**——别人 `npm install` 进来就能把自己的 agent(Claude / GPT / 本地模型 / RAG / 业务系统)接到微信上。Claude 只是其中一种可能的消费者,**不是**库的责任。
 
 ### 1.2 新目标
 
-把现有仓库重构为 npm workspaces 上的两个独立包:
+把现有仓库重构成**单一 npm 包** `wechat-channel`:
 
-| 包 | 职责 | 依赖 |
-|---|---|---|
-| **`wechat-channel`** | 微信 ilink 协议通道: 长轮询 + 媒体 I/O + 状态存储 + 事件分发 | 无业务依赖 |
-| **`@wechat/channel-claude`** | 把 Claude Agent SDK 接到 `wechat-channel` 的参考适配器 | `wechat-channel` + `@anthropic-ai/claude-agent-sdk` |
+| 范围 | 处理 |
+|---|---|
+| `src/wechat/*`(协议层) | 保留为库核心 |
+| `src/state/{store,context-tokens,sync-buf}.ts`(通道状态) | 保留为库核心 |
+| `src/state/sessions.ts`(Claude 会话) | **迁出**到 `legacy/` |
+| `src/bot.ts`、`src/bot/*`(bot 编排) | **迁出**到 `legacy/` |
+| `src/claude/agent.ts`(Claude SDK 调用) | **迁出**到 `legacy/` |
+| `src/index.ts`(CLI 入口) | **删除** |
+| `src/login.ts`(CLI 登录入口) | **删除**,库内提供 `channel.loginQR()` |
+| `src/config.ts`(全局 .env 读取) | 重写为 `loadEnvOverrides()`,不再是模块级单例 |
+| 根 `package.json` | 改为 `wechat-channel`,删除 Claude SDK 依赖 |
 
 **库的核心原则**:
 
-1. `wechat-channel` **不依赖**任何 agent SDK——它是 agent-agnostic 的
-2. Claude bot 的所有特化逻辑(`MEDIA:` 指令、`streaming.ts`、`markdown-filter.ts`、`sessions.json`)迁移到 `@wechat/channel-claude`
-3. 库对外 API 极简,只有 `createChannel()` + 一个 handler 形态;不暴露底座构造细节
-4. 状态存储抽象为接口,内置 JSON 文件实现 + 内存实现(测试用);第三方可注入自定义实现
+1. **`wechat-channel` 不引用任何 agent SDK**——它是 agent-agnostic 的桥
+2. **Claude bot 的所有特化逻辑**(`MEDIA:` 指令、`streaming.ts`、`markdown-filter.ts`、`sessions.json`)整体迁出到 `legacy/` 目录,作为存档保留(不维护)
+3. **库对外 API 极简**,只有 `createChannel()` + 一个 handler 形态;不暴露底座构造细节
+4. **状态存储抽象为接口**,内置 JSON 文件实现 + 内存实现(测试用);第三方可注入自定义实现
 
 ---
 
@@ -41,47 +48,49 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  wechat-channel (库)                                          │
+│  wechat-channel (本仓库, 单一 npm 包)                         │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │ wechat/api.ts        WechatApiClient (11 endpoints)    │  │
-│  │ wechat/crypto.ts     AES-128-ECB / MD5                  │  │
-│  │ wechat/media.ts      CDN 上传/下载 + 加解密            │  │
-│  │ wechat/login.ts      QR 登录状态机                      │  │
-│  │ wechat/types.ts      ilink 协议类型                     │  │
+│  │ wechat/                                                │  │
+│  │   api.ts          WechatApiClient (11 endpoints)       │  │
+│  │   crypto.ts       AES-128-ECB / MD5                    │  │
+│  │   media.ts        CDN 上传/下载 + 加解密                │  │
+│  │   login.ts        QR 登录状态机                        │  │
+│  │   types.ts        ilink 协议类型                       │  │
 │  ├────────────────────────────────────────────────────────┤  │
-│  │ channel/                                              │  │
-│  │   create.ts          createChannel() 入口              │  │
-│  │   long-poll.ts       长轮询 + 错误恢复 (errcode=-14 等)│  │
-│  │   inbound.ts         解密媒体 → 本地路径               │  │
-│  │   outbound.ts        text/media 上传 helper            │  │
-│  │   reply.ts           Reply 对象 (handler 用)           │  │
-│  │   typing.ts          "对方正在输入" 心跳 (通用)        │  │
+│  │ channel/                                               │  │
+│  │   create.ts       createChannel() 入口                 │  │
+│  │   long-poll.ts    长轮询 + 错误恢复 (errcode=-14 等)  │  │
+│  │   inbound.ts      解密媒体 → 本地路径                  │  │
+│  │   outbound.ts     text/media 上传 helper               │  │
+│  │   reply.ts        Reply 对象 (handler 用)              │  │
+│  │   typing.ts       "对方正在输入" 心跳 (通用)           │  │
 │  ├────────────────────────────────────────────────────────┤  │
-│  │ store/                                                │  │
-│  │   types.ts           Store 接口 (sync_buf / context)  │  │
-│  │   file.ts            JsonFileStore (默认)             │  │
-│  │   memory.ts          MemoryStore (测试用)             │  │
+│  │ store/                                                 │  │
+│  │   types.ts        Store 接口 (sync_buf / ctx_token)   │  │
+│  │   file.ts         JsonFileStore (默认)                │  │
+│  │   memory.ts       MemoryStore (测试用)                │  │
+│  ├────────────────────────────────────────────────────────┤  │
+│  │ config.ts        loadEnvOverrides() 默认值解析         │  │
+│  │ errors.ts        ChannelError / WechatApiError         │  │
+│  │ index.ts         导出 createChannel / 类型 / 错误     │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
                           ▲
-                          │ handler(msg, reply)
+                          │ import { createChannel } from "wechat-channel"
                           │
-┌──────────────────────────────────────────────────────────────┐
-│  @wechat/channel-claude (适配器)                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │ index.ts          createClaudeBot() 工厂               │  │
-│  │ agent.ts          runClaudeTurn() — Claude Agent SDK   │  │
-│  │ sessions.ts       per-user Claude session_id 存储      │  │
-│  │ streaming.ts      Claude 输出 → 微信增量推送           │  │
-│  │ markdown-filter.ts 清理 Claude markdown 输出            │  │
-│  │ media-directive.ts 解析 MEDIA:/path 指令               │  │
-│  └────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+              ┌───────────┴───────────┐
+              │                       │
+              ▼                       ▼
+        用户的 Claude bot      用户的 GPT bot
+        (在自己的仓库)         (在自己的仓库)
+                              ...
 ```
+
+`legacy/` 目录在仓库根,放之前整套 Claude bot 实现 + 老的 `package.json` + 老的 README,**不维护**,仅作历史参考。
 
 ---
 
-## 3. 公开 API — `wechat-channel`
+## 3. 公开 API
 
 ### 3.1 主入口
 
@@ -98,6 +107,7 @@ const channel = await createChannel({
   cdnBaseUrl?: string,     // 默认 https://novac2c.cdn.weixin.qq.com/c2c
   channelVersion?: string, // 默认读 package.json
   botAgent?: string,      // 默认 wechat-channel/<version>
+  botType?: string,        // 默认 "3";扫码登录时传给 ilink
 
   // 状态存储 (默认 JSON 文件于 stateDir)
   stateDir?: string,       // 默认 ~/.wechat-channel
@@ -152,96 +162,22 @@ export interface Reply {
 ```ts
 channel.api;     // WechatApiClient 实例(原始 HTTP,给 power user)
 channel.events;  // EventEmitter — "message" / "error" / "ready" / "stopped"
-channel.loginQR();  // 触发扫码登录流程,返回 { qrcodeImg: Buffer, waitForLogin }
+channel.loginQR();  // 触发扫码登录流程,返回 { qrcodeImg, waitForLogin }
 ```
 
-### 3.5 不在库内
+### 3.5 不在库内(明确划线)
 
-- ❌ Markdown 清洗 — agent 输出端的特化,放 channel-claude
-- ❌ 流式分块推送 — 同上,放 channel-claude
-- ❌ `MEDIA:` 指令约定 — Claude 风格的"返回文件"协议,放 channel-claude
-- ❌ Agent 业务会话(Claude session_id / GPT thread)— 完全应用层
+- ❌ **任何 agent SDK 引用**——Claude / GPT / LangChain / 都不属于本库
+- ❌ **Markdown 清洗**——agent 输出端的特化,各 agent 自己处理
+- ❌ **流式分块推送**——同上,各 agent 自己处理
+- ❌ **`MEDIA:` 指令约定**——Claude 风格的"返回文件"协议,各 agent 自己定
+- ❌ **Agent 业务会话**(Claude session_id / GPT thread)——完全应用层
 
 ---
 
-## 4. 公开 API — `@wechat/channel-claude`
+## 4. 状态存储抽象
 
-### 4.1 主入口
-
-```ts
-import { createClaudeBot } from "@wechat/channel-claude";
-
-const bot = await createClaudeBot({
-  // wechat 通道配置 (透传给 createChannel)
-  wechat: {
-    botToken: string,
-    accountId: string,
-    baseUrl?: string,
-    cdnBaseUrl?: string,
-    stateDir?: string,   // 默认 ~/.wechat-channel-claude
-  },
-
-  // claude 配置
-  claude: {
-    apiKey?: string,        // 优先于 process.env.ANTHROPIC_API_KEY
-    baseUrl?: string,       // CLAUDE_BASE_URL,代理 / LiteLLM / vLLM
-    authToken?: string,     // CLAUDE_AUTH_TOKEN,覆盖 apiKey
-    model: string,          // 默认 claude-sonnet-4-6
-    workDir: string,        // 默认 ./workspace
-    allowedTools?: string[],// 空数组 = 全部工具
-    maxTurns?: number,      // 0 = 不限
-  },
-
-  // 行为开关
-  streaming?: {
-    enabled: boolean,        // 默认 true
-    minChars: number,        // 默认 200
-    idleMs: number,          // 默认 3000
-    maxChars: number,        // 默认 4000
-  },
-  markdownFilter?: boolean,  // 默认 true
-  blockedUsers?: Set<string>,
-  onError?: (err: Error, ctx: { phase: string; userId?: string }) => void,
-});
-
-await bot.start();
-await bot.stop();
-```
-
-### 4.2 适配器内部做的事
-
-```ts
-// 伪代码(实际写在 packages/wechat-channel-claude/src/index.ts)
-const channel = await createChannel({
-  botToken: opts.wechat.botToken,
-  accountId: opts.wechat.accountId,
-  baseUrl: opts.wechat.baseUrl,
-  stateDir: opts.wechat.stateDir,
-  onError: opts.onError,
-});
-
-channel.events.on("message", async (msg) => {
-  const reply = new ClaudeReply(channel.api, msg, {
-    streaming: opts.streaming,
-    markdownFilter: opts.markdownFilter,
-  });
-  const sessionId = sessions.get(msg.fromUserId);
-  const turn = await runClaudeTurn(
-    { userId: msg.fromUserId, text: msg.text, media: [...msg.media], sessionId },
-    reply.callbacks(),
-    { cfg: claudeCfg },
-  );
-  if (turn.sessionId) await sessions.set(msg.fromUserId, turn.sessionId);
-  // MEDIA: 指令 + fallback
-  await reply.finalize(turn);
-});
-```
-
----
-
-## 5. 状态存储抽象
-
-### 5.1 接口
+### 4.1 接口
 
 ```ts
 export interface Store {
@@ -253,99 +189,26 @@ export interface Store {
 }
 ```
 
-### 5.2 键空间
+### 4.2 键空间
 
-| Key | 内容 | 库/适配器 |
+| Key | 内容 | 所属 |
 |---|---|---|
-| `sync_buf` | getUpdates 长轮询游标 | wechat-channel |
-| `ctx:<userId>` | per-user context_token | wechat-channel |
-| `claude_session:<userId>` | per-user Claude session_id | channel-claude |
+| `sync_buf` | getUpdates 长轮询游标 | 库 |
+| `ctx:<userId>` | per-user context_token | 库 |
+| `credentials` | bot_token + account_id(可选,扫码登录后写) | 库 |
 
-库只读 `sync_buf` + `ctx:*`,不会触碰 Claude 的键。适配器读 `ctx:*`(复用库存的 context_token)并写自己的 `claude_session:*`。
+**库**只读 `sync_buf` + `ctx:*`,不会触碰任何 agent 自己的键。应用/agent 适配器在自己的 Store 实现里管理自己的键(`claude_session:<userId>` 等)。
 
-### 5.3 内置实现
+### 4.3 内置实现
 
 - `JsonFileStore` — 全部键塞一个 JSON 文件(默认 `stateDir/store.json`),原子写
 - `MemoryStore` — Map 后端,库测试用
 
 ---
 
-## 6. 仓库目录结构 (npm workspaces)
+## 5. 错误处理
 
-```
-wechat-agent-channel/                    # 仓库根
-├── package.json                         # workspaces: ["packages/*"]
-├── tsconfig.base.json                   # 共享 tsconfig
-├── README.md                            # 仓库概览,链接到两个子包
-├── docs/
-│   └── superpowers/specs/...            # 设计文档保留
-├── packages/
-│   ├── wechat-channel/                  # 通道库
-│   │   ├── package.json                 # name: "wechat-channel",无 Claude 依赖
-│   │   ├── tsconfig.json
-│   │   ├── README.md
-│   │   ├── src/
-│   │   │   ├── index.ts                 # 导出 createChannel / ChannelMsg / Reply / Store / 错误
-│   │   │   ├── wechat/                  # api / crypto / login / media / types
-│   │   │   ├── channel/                 # create / long-poll / inbound / outbound / reply / typing
-│   │   │   ├── store/                   # types / file / memory
-│   │   │   └── errors.ts                # ChannelError / WechatApiError
-│   │   └── test/                        # vitest
-│   │       ├── channel.test.ts
-│   │       ├── inbound.test.ts
-│   │       ├── outbound.test.ts
-│   │       └── store.test.ts
-│   │
-│   └── wechat-channel-claude/           # Claude 适配器
-│       ├── package.json                 # name: "@wechat/channel-claude",依赖 wechat-channel + claude-agent-sdk
-│       ├── tsconfig.json
-│       ├── README.md
-│       ├── src/
-│       │   ├── index.ts                 # createClaudeBot 工厂
-│       │   ├── agent.ts                 # runClaudeTurn (从 src/claude/agent.ts 搬)
-│       │   ├── sessions.ts              # Claude session_id 存储
-│       │   ├── streaming.ts             # 流式推送 (从 src/bot/streaming.ts 搬)
-│       │   ├── markdown-filter.ts       # markdown 清洗 (从 src/bot/markdown-filter.ts 搬)
-│       │   └── media-directive.ts       # MEDIA: 解析 (从 src/bot/send.ts 抽出)
-│       └── test/
-│           ├── agent.test.ts
-│           ├── streaming.test.ts
-│           └── media-directive.test.ts
-│
-└── (删除) src/, 根目录 dist/, 根目录 test/, 根 .env.example 残留
-```
-
-### 6.1 删除/迁移清单
-
-| 现位置 | 迁至 |
-|---|---|
-| `src/wechat/*` | `packages/wechat-channel/src/wechat/*` |
-| `src/state/store.ts` | `packages/wechat-channel/src/store/file.ts` |
-| `src/state/context-tokens.ts` | `packages/wechat-channel/src/store/{types,file}.ts` |
-| `src/state/sync-buf.ts` | 同上 |
-| `src/state/sessions.ts` | `packages/wechat-channel-claude/src/sessions.ts` |
-| `src/bot.ts` 的长轮询循环 | `packages/wechat-channel/src/channel/long-poll.ts` |
-| `src/bot.ts` 的 TypingKeepalive | `packages/wechat-channel/src/channel/typing.ts` |
-| `src/bot/inbound.ts` | `packages/wechat-channel/src/channel/inbound.ts`(去掉 config 依赖,改用入参) |
-| `src/bot/send.ts` 的通用部分(text/media) | `packages/wechat-channel/src/channel/outbound.ts` |
-| `src/bot/send.ts` 的 MEDIA: 解析 | `packages/wechat-channel-claude/src/media-directive.ts` |
-| `src/bot/streaming.ts` | `packages/wechat-channel-claude/src/streaming.ts` |
-| `src/bot/markdown-filter.ts` | `packages/wechat-channel-claude/src/markdown-filter.ts` |
-| `src/claude/agent.ts` | `packages/wechat-channel-claude/src/agent.ts` |
-| `src/index.ts` | `packages/wechat-channel-claude/src/index.ts`(工厂内部调 createChannel) |
-| `src/login.ts` | `packages/wechat-channel/src/wechat/login.ts`(保留)+ `packages/wechat-channel-claude/bin/login.ts`(CLI 包装) |
-| `src/config.ts` | 拆为两个包的 options schema,不再有全局 config |
-| `src/log.ts` | 各自包自带 logger,接受外部注入 |
-| 根 `package.json` | 改成 workspaces 配置 |
-| 根 `tsconfig.json` | 拆为 `tsconfig.base.json` + 各包 `tsconfig.json` |
-| 根 `README.md` | 重写为概览 + 两个子包链接 |
-| 根 `test/` | 拆到两个包的 `test/` |
-
----
-
-## 7. 错误处理
-
-### 7.1 库抛出三类错误
+### 5.1 库抛出三类错误
 
 ```ts
 export class ChannelError extends Error {
@@ -359,7 +222,7 @@ export class MediaError extends Error {
 }
 ```
 
-### 7.2 长轮询错误恢复
+### 5.2 长轮询错误恢复
 
 - `errcode = -14` → 暂停 1 小时(写 warn 日志,handler 不感知)
 - 连续 3 次网络/超时错误 → backoff 30s
@@ -367,86 +230,171 @@ export class MediaError extends Error {
 
 ---
 
-## 8. 测试策略
+## 6. 仓库目录结构
 
-### 8.1 库 (`wechat-channel`)
+```
+wechat-agent-channel/                    # 仓库根
+├── package.json                         # name: "wechat-channel",无 Claude 依赖
+├── tsconfig.json
+├── README.md                            # wechat-channel 库文档
+├── docs/
+│   └── superpowers/specs/...            # 设计文档
+├── src/
+│   ├── index.ts                         # 导出 createChannel / ChannelMsg / Reply / Store / 错误
+│   ├── wechat/                          # api / crypto / login / media / types
+│   ├── channel/                         # create / long-poll / inbound / outbound / reply / typing
+│   ├── store/                           # types / file / memory
+│   ├── config.ts                        # loadEnvOverrides()
+│   └── errors.ts
+├── test/
+│   ├── channel.test.ts                  # createChannel + 长轮询 + 错误恢复
+│   ├── inbound.test.ts                  # 媒体解密
+│   ├── outbound.test.ts                 # text/media/typing
+│   ├── store.test.ts                    # JsonFileStore + MemoryStore
+│   └── wechat-api.test.ts               # ilink 端点契约测试
+└── legacy/                              # 老的 Claude bot 实现, 存档, 不维护
+    ├── README.md                        # 说明: 这是上个实验, 仅作历史参考
+    ├── package.json                     # 老的 package.json 全文
+    ├── src/                             # 老的 src/ 整棵
+    ├── test/                            # 老的 test/ 整棵
+    └── ...
+```
 
-- **单元测试**:Store(file/memory)、crypto、markdown 过滤(不在库内,跳过)
+### 6.1 迁移清单
+
+| 现位置 | 迁至 |
+|---|---|
+| `src/wechat/api.ts` | `src/wechat/api.ts`(原地) |
+| `src/wechat/crypto.ts` | `src/wechat/crypto.ts`(原地) |
+| `src/wechat/types.ts` | `src/wechat/types.ts`(原地) |
+| `src/wechat/login.ts` | `src/wechat/login.ts`(原地,内部封装为 `channel.loginQR()`) |
+| `src/wechat/media.ts` | `src/wechat/media.ts`(原地) |
+| `src/state/store.ts` | `src/store/file.ts`(改名,内部 API 适配新 Store 接口) |
+| `src/state/context-tokens.ts` | 折进 `src/store/file.ts`(键 `ctx:<userId>`) |
+| `src/state/sync-buf.ts` | 折进 `src/store/file.ts`(键 `sync_buf`) |
+| `src/state/sessions.ts` | **`legacy/src/state/sessions.ts`** |
+| `src/bot.ts` 的长轮询循环 | `src/channel/long-poll.ts`(去掉 Claude 相关代码) |
+| `src/bot.ts` 的 TypingKeepalive | `src/channel/typing.ts` |
+| `src/bot/inbound.ts` | `src/channel/inbound.ts`(去掉 config 依赖,改用入参) |
+| `src/bot/send.ts` 的通用部分(text/media) | `src/channel/outbound.ts` |
+| `src/bot/send.ts` 的 MEDIA: 解析 | **`legacy/src/bot/send.ts`** |
+| `src/bot/streaming.ts` | **`legacy/src/bot/streaming.ts`** |
+| `src/bot/markdown-filter.ts` | **`legacy/src/bot/markdown-filter.ts`** |
+| `src/claude/agent.ts` | **`legacy/src/claude/agent.ts`** |
+| `src/bot.ts`(整体) | **`legacy/src/bot.ts`** |
+| `src/index.ts`(CLI 入口) | **`legacy/src/index.ts`** + README 说明如何手动跑 |
+| `src/login.ts`(CLI 入口) | **`legacy/src/login.ts`** + README 说明 `wechat-channel` 改用 `channel.loginQR()` |
+| `src/config.ts`(全局 .env 单例) | `src/config.ts` 改为 `loadEnvOverrides(prefix)`,不再 module-level 单例 |
+| `src/log.ts` | 各自包自带 logger,接受外部注入;库默认用 pino |
+| `test/bot/inbound.test.ts` | `test/inbound.test.ts`(适配新 API) |
+| `test/bot/send.test.ts` | `test/outbound.test.ts`(适配新 API) |
+| `test/bot/streaming.test.ts` | **`legacy/test/bot/streaming.test.ts`** |
+| `test/bot/markdown-filter.test.ts` | **`legacy/test/bot/markdown-filter.test.ts`** |
+| 根 `package.json` | 改为 `wechat-channel`,删除 `@anthropic-ai/claude-agent-sdk` 依赖 |
+| 根 `tsconfig.json` | 保持 ESM + Node 22,引用 `src/` 不再引用 `src/claude/` 等 |
+| 根 `README.md` | 重写为 `wechat-channel` 库 README |
+
+### 6.2 不迁移,直接删除
+
+- `src/bot.ts` 中手写的 markdown 清洗分支
+- 老的 `index.ts` 中的 SIGINT 优雅退出逻辑(库内由 `channel.stop()` 处理)
+- 老的 `login.ts` 中的终端二维码渲染(库内只返回 `qrcodeImg: Buffer`,渲染交给用户)
+- `MEDIA:` 指令解析的代码路径(`legacy/` 完整保留,主仓库不引用)
+
+### 6.3 `legacy/` 目录硬性约束
+
+- `legacy/package.json` 顶部加注释 `"//": "ARCHIVED — not maintained, kept for historical reference"`
+- `legacy/README.md` 第一行写明:**This directory contains an earlier CLI bot implementation. It is not part of the published `wechat-channel` package and is not maintained. To run the old bot: see legacy/README.md.**
+- `legacy/` 下的代码引用一律用相对路径,不动 `src/` 的导出
+- 仓库顶层 vitest 不跑 `legacy/test/`
+- `.npmignore` / `package.json#files` 显式排除 `legacy/`,确保 npm publish 不带出去
+
+---
+
+## 7. 测试策略
+
+### 7.1 库 (`wechat-channel`)
+
+- **单元测试**:Store(file/memory)、crypto、inbound 解密、outbound helper、errors
 - **集成测试**:用 `MemoryStore` + mock `WechatApiClient`(MSW 或手写 stub)模拟:
   - 长轮询 + 多消息
   - 媒体下载/上传往返
   - errcode=-14 暂停
   - SIGINT 优雅退出
 - **契约测试**:mock `fetch` 后,断言发出的 ilink 请求体符合 `weixin-channel-api.md`
+- **`legacy/` 不进测试**——独立 vitest 配置,只手动跑
 
-### 8.2 适配器 (`@wechat/channel-claude`)
+### 7.2 文档测试
 
-- **单元测试**:`runClaudeTurn`、`streaming.ts`、`markdown-filter.ts`、`media-directive.ts`
-- **集成测试**:mock Claude Agent SDK 输出 → 验证 reply 序列
-
-### 8.3 文档测试
-
-- README 里的 `createChannel` / `createClaudeBot` 代码片段必须可粘贴运行(用 vitest `test.each` 验证至少 default export 存在)
+- README 里的 `createChannel` / `channel.loginQR` 代码片段必须可粘贴运行(用 vitest `test.each` 验证至少 default export 存在)
 
 ---
 
-## 9. 配置传递与默认值
-
-| 配置 | 默认值 | 来源 |
-|---|---|---|
-| `botToken` | 无,必填 | 入参 |
-| `accountId` | 无,必填 | 入参 |
-| `baseUrl` | `https://ilinkai.weixin.qq.com` | 入参 → env(`WECHAT_BASE_URL`)→ 默认 |
-| `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | 同上 |
-| `stateDir` | `~/.wechat-channel` | 入参 → env(`WECHAT_CHANNEL_STATE_DIR`)→ 默认 |
-| `mediaTmpDir` | `<stateDir>/media` | 派生 |
-| `longPollTimeoutMs` | `35_000` | 入参 → env → 默认 |
-| `claude.model` | `claude-sonnet-4-6` | 入参 → env(`CLAUDE_MODEL`)→ 默认 |
-| `claude.workDir` | `./workspace` | 入参 → env(`CLAUDE_WORK_DIR`)→ 默认 |
+## 8. 配置传递与默认值
 
 每个包自带 `loadEnvOverrides(prefix)` helper,从 `process.env` 读默认值,允许用户不传参直接 `createChannel({ botToken, accountId })`。
 
+| 配置 | 默认值 | 来源 |
+|---|---|---|
+| `botToken` | 无,必填 | 入参 → env(`WECHAT_BOT_TOKEN`)→ 必填报错 |
+| `accountId` | 无,必填 | 入参 → env(`WECHAT_ACCOUNT_ID`)→ 必填报错 |
+| `baseUrl` | `https://ilinkai.weixin.qq.com` | 入参 → env(`WECHAT_BASE_URL`)→ 默认 |
+| `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | 入参 → env(`WECHAT_CDN_BASE_URL`)→ 默认 |
+| `stateDir` | `~/.wechat-channel` | 入参 → env(`WECHAT_CHANNEL_STATE_DIR`)→ 默认 |
+| `mediaTmpDir` | `<stateDir>/media` | 派生 |
+| `longPollTimeoutMs` | `35_000` | 入参 → env(`LONG_POLL_TIMEOUT_MS`)→ 默认 |
+| `botType` | `"3"` | 入参 → env(`WECHAT_BOT_TYPE`)→ 默认 |
+
+**`ANTHROPIC_API_KEY` / `CLAUDE_*` 等 Claude 相关变量全部不再读取**——库不关心。
+
 ---
 
-## 10. 兼容性 / 迁移路径
+## 9. 兼容性 / 迁移路径
 
-### 10.1 不保留旧 CLI 入口
+### 9.1 不保留旧 CLI 入口
 
-- 根 `npm start` 删除。改用 `npx @wechat/channel-claude`(或装到全局)
-- 老的 `.env` 变量(`WECHAT_BOT_TOKEN` / `ANTHROPIC_API_KEY` 等)继续支持,行为不变
+- 根 `npm start` 删除
+- 老的 `.env` 变量(`WECHAT_BOT_TOKEN` / `WECHAT_ACCOUNT_ID` 等)继续支持,行为不变
+- `ANTHROPIC_API_KEY` / `CLAUDE_MODEL` 等 Claude 相关变量**不再读取**,用户使用 Claude bot 时自己管理
 
-### 10.2 现有 `bot_token` / 凭证文件复用
+### 9.2 凭证迁移
 
-- `~/.wechat-agent-channel/credentials.json` 不再被读;改为 `~/.wechat-channel/credentials.json`
-- 提供一次性迁移命令(放在 channel 包):`wechat-channel migrate-credentials <oldPath>` 把老凭证复制到新位置
+- 老的 `~/.wechat-agent-channel/credentials.json` 不再被读;改为 `~/.wechat-channel/credentials.json`(或写到 Store 的 `credentials` 键)
+- 提供一次性迁移命令(放在库内):`wechat-channel migrate-credentials <oldPath>` 把老凭证复制到新位置
 - `sync-buf.json` 同理迁移
 
-### 10.3 协议文档保留
+### 9.3 协议文档保留
 
 - `weixin-channel-api.md` 仍在仓库根,作为协议参考(库测试以它为准)
 
+### 9.4 包名
+
+- 仓库根 `package.json#name` 改为 `"wechat-channel"`
+- 如果原来 `wechat-agent-channel` 名字已被 npm 占,可以选择 unscoped `wechat-channel` 或申请 `@wechat/channel` scoped——实施规划阶段再定
+
 ---
 
-## 11. 开放问题
+## 10. 开放问题
 
 1. **`channel.events` 是必须的吗?** 函数式 API 极简,但多 handler / 异步订阅会受限。倾向**保留** events 作为逃生口,但不写进 README 头部。
 2. **是否提供 CJS 入口?** 当前仓库纯 ESM,Node 22+。倾向**只 ESM**,简化打包。
-3. **`@wechat/channel-claude` 用 scoped 名 vs unscoped?** scoped (`@wechat/channel-claude`) 更专业,但用户得配 npm scope。倾向**scoped**,后续如果出 `@wechat/channel-openai` 等对称。
+3. **包名冲突怎么办?** 见 §9.4。倾向直接 `wechat-channel`,unscoped。
 4. **`channel.loginQR()` 的形态?** 倾向返回 `{ qrcodeImg: Buffer, waitForLogin(): Promise<{ botToken, accountId, baseUrl }> }`,让用户自己决定渲染方式(终端 / web / mobile)。
-5. **是否暴露 `bot_type` 配置?** 当前 `bot_type=3` 写死。倾向**暴露**,不复杂。
-
-这些问题在实施规划阶段再次确认;不影响本设计主干。
+5. **legacy/ 内的 `package.json` 还要维护吗?** 倾向**只放源码 + 静态说明**,不带 `package.json` 也不带 `node_modules`——用户想跑自己 `cd legacy && npm install`。
 
 ---
 
-## 12. 验收标准
+## 11. 验收标准
 
 库实现完成的判定:
 
-- [ ] `packages/wechat-channel` `npm pack` 出一个不依赖 `@anthropic-ai/claude-agent-sdk` 的 tarball
-- [ ] `packages/wechat-channel-claude` `npm pack` 出一个依赖 `wechat-channel` 和 `@anthropic-ai/claude-agent-sdk` 的 tarball
+- [ ] 根 `package.json` `name === "wechat-channel"`,**不依赖** `@anthropic-ai/claude-agent-sdk`
+- [ ] `src/` 只包含 `wechat/` / `channel/` / `store/` + `index.ts` / `config.ts` / `errors.ts`,**无** `claude/` 或 `bot.ts`
+- [ ] `npm pack` 出一个干净的 tarball,不含 `legacy/`
+- [ ] `legacy/` 完整保存老的 Claude bot 源码 + 老 `package.json` + 老 README,带"ARCHIVED"标注
+- [ ] 仓库根 `vitest run` 只跑 `test/`,不跑 `legacy/test/`
 - [ ] 两个包都能 `npm install` 到一个全新目录并跑通 vitest
-- [ ] `wechat-channel` 的 README 用一段 5 行代码展示"接收 + 回复"完整路径
-- [ ] `@wechat/channel-claude` 的 README 给出从老 `wechat-agent-channel` bot 迁移的 1:1 配置对照表
+- [ ] 仓库 README 用一段 5 行代码展示"接收 + 回复"完整路径
+- [ ] README 给出从老 `wechat-agent-channel` bot 迁移的 1:1 配置对照表(去掉 Claude 相关变量,其余平移)
 - [ ] 现有协议文档 `weixin-channel-api.md` 不动,作为契约测试的 source of truth
-- [ ] 老的 `src/` 全部删除,根目录只剩 workspaces 顶层 + `docs/`
+- [ ] 老的 `src/index.ts` / `src/login.ts` 已迁移到 `legacy/`,根目录无 CLI 入口
