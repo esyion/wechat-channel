@@ -48,7 +48,7 @@
 | `src/store/types.ts` | `Store` interface |
 | `src/store/file.ts` | `JsonFileStore` (default) |
 | `src/store/memory.ts` | `MemoryStore` (testing) |
-| `bin/migrate-credentials.ts` | One-shot CLI for migrating `~/.wechat-agent-channel/credentials.json` |
+| `bin/migrate-credentials.ts` | One-shot CLI for migrating `~/.wechat-agent-channel/credentials.json` (lives at `src/bin/migrate-credentials.ts`) |
 | `test/errors.test.ts` | Error class shape tests |
 | `test/store/file.test.ts` | JsonFileStore tests |
 | `test/store/memory.test.ts` | MemoryStore tests |
@@ -93,7 +93,7 @@ Replace existing `package.json` with:
     "./package.json": "./package.json"
   },
   "bin": {
-    "wechat-channel": "./bin/migrate-credentials.js"
+    "wechat-channel": "./dist/bin/migrate-credentials.js"
   },
   "files": ["dist", "dist-cjs", "README.md"],
   "publishConfig": {
@@ -1759,7 +1759,7 @@ Expected: FAIL with "Cannot find module"
 - [ ] **Step 3: Implement `src/channel/login.ts`**
 
 ```ts
-import { toString as qrToString, toBuffer as qrToBuffer } from "qrcode";
+import { toBuffer as qrToBuffer, toDataURL as qrToDataURL, toString as qrToString } from "qrcode";
 
 import type {
   LoginResult,
@@ -1793,8 +1793,7 @@ export function createQRLoginHandle(opts: CreateQRLoginOpts): QRLoginHandle {
       return lines.join("\n");
     },
     async toPng(o?: QrPngOpts): Promise<Buffer> {
-      const text = matrixToString(opts.matrix);
-      return qrToBuffer(text, {
+      return qrToBuffer(matrixToString(opts.matrix), {
         type: "png",
         width: o?.size ?? 300,
         margin: o?.margin ?? 2,
@@ -1802,21 +1801,18 @@ export function createQRLoginHandle(opts: CreateQRLoginOpts): QRLoginHandle {
       });
     },
     toSvg(o?: QrSvgOpts): string {
-      const text = matrixToString(opts.matrix);
-      return qrToString(text, {
+      return qrToString(matrixToString(opts.matrix), {
         type: "svg",
         margin: o?.margin ?? 2,
         errorCorrectionLevel: "M",
       });
     },
     async toDataURL(o?: QrPngOpts): Promise<string> {
-      const text = matrixToString(opts.matrix);
-      return qrToString(text, {
-        type: "png",
+      return qrToDataURL(matrixToString(opts.matrix), {
         width: o?.size ?? 300,
         margin: o?.margin ?? 2,
         errorCorrectionLevel: "M",
-      }).then((s) => `data:image/png;base64,${s}`);
+      });
     },
     waitForLogin: opts.waitForLogin,
   };
@@ -2206,7 +2202,9 @@ git commit -m "chore: archive Claude bot to legacy/, exclude from tests + publis
 **Files:**
 - Create: `bin/migrate-credentials.ts`
 
-- [ ] **Step 1: Implement the bin**
+- [ ] **Step 1: Implement the bin at `src/bin/migrate-credentials.ts`**
+
+(Lives under `src/bin/` so the existing `tsconfig.json` `include: ["src/**/*.ts"]` picks it up.)
 
 ```ts
 #!/usr/bin/env node
@@ -2246,15 +2244,15 @@ console.log(`Next: set WECHAT_CHANNEL_STATE_DIR=${newDir} in your .env`);
 - [ ] **Step 2: Build and smoke test**
 
 Run: `npm run build`
-Expected: `bin/migrate-credentials.js` produced
+Expected: `dist/bin/migrate-credentials.js` and `dist-cjs/bin/migrate-credentials.js` produced
 
 Run: `node dist/bin/migrate-credentials.js`
-Expected: prints usage
+Expected: prints usage and exits with code 1
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add bin/migrate-credentials.ts
+git add src/bin/migrate-credentials.ts
 git commit -m "feat(bin): migrate-credentials CLI for legacy state dir"
 ```
 
@@ -2357,10 +2355,10 @@ Expected: exit 0
 Run: `npm run build`
 Expected: `dist/` and `dist-cjs/` both populated.
 
-- [ ] **Step 4: Verify tarball excludes `legacy/`**
+- [ ] **Step 4: Verify tarball excludes `legacy/` and includes `dist/bin/`**
 
 Run: `npm pack --dry-run`
-Expected: file list contains `dist/`, `dist-cjs/`, `README.md`, `package.json`; **no** `legacy/`.
+Expected: file list contains `dist/index.js`, `dist/index.d.ts`, `dist/bin/migrate-credentials.js`, `dist-cjs/index.js`, `README.md`, `package.json`; **no** `legacy/`.
 
 - [ ] **Step 5: Verify package.json is publishable**
 
