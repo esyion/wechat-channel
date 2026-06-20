@@ -21,7 +21,7 @@
 
 ### 1.2 新目标
 
-把现有仓库重构成**单一 npm 包** `wechat-channel`:
+把现有仓库重构成**单一 npm 包** `@wechat/channel`:
 
 | 范围 | 处理 |
 |---|---|
@@ -160,9 +160,44 @@ export interface Reply {
 ### 3.4 高级逃生口
 
 ```ts
-channel.api;     // WechatApiClient 实例(原始 HTTP,给 power user)
-channel.events;  // EventEmitter — "message" / "error" / "ready" / "stopped"
-channel.loginQR();  // 触发扫码登录流程,返回 { qrcodeImg, waitForLogin }
+channel.api;       // WechatApiClient 实例(原始 HTTP,给 power user)
+channel.loginQR(); // 触发扫码登录,见下方
+```
+
+**`channel.loginQR()`** 同时支持终端和 Web 渲染:
+
+```ts
+interface QRLoginHandle {
+  /** 原始二维矩阵 (rows × cols, true = 深色模块) */
+  matrix: boolean[][];
+  /** 渲染为终端 ASCII 字符画(无外部依赖) */
+  toTerminal(opts?: { margin?: number; invert?: boolean }): string;
+  /** 渲染为 PNG buffer(懒加载 `qrcode` 依赖) */
+  toPng(opts?: { size?: number; margin?: number }): Promise<Buffer>;
+  /** 渲染为 SVG 字符串 */
+  toSvg(opts?: { margin?: number }): string;
+  /** 渲染为 data URL (base64 PNG,直接在 <img src=...> 用) */
+  toDataURL(opts?: { size?: number; margin?: number }): Promise<string>;
+  /** 等待扫码确认登录 */
+  waitForLogin(opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<{
+    botToken: string;
+    accountId: string;
+    baseUrl: string;
+  }>;
+}
+```
+
+```ts
+// 终端用户
+const qr = await channel.loginQR();
+process.stdout.write(qr.toTerminal());
+const { botToken, accountId } = await qr.waitForLogin();
+
+// Web 用户
+const qr = await channel.loginQR();
+const dataUrl = await qr.toDataURL({ size: 300 });
+res.send(`<img src="${dataUrl}" />`);
+const result = await qr.waitForLogin({ signal: reqAbortSignal });
 ```
 
 ### 3.5 不在库内(明确划线)
@@ -234,7 +269,7 @@ export class MediaError extends Error {
 
 ```
 wechat-agent-channel/                    # 仓库根
-├── package.json                         # name: "wechat-channel",无 Claude 依赖
+├── package.json                         # name: "@wechat/channel",无 Claude 依赖,双入口 ESM+CJS
 ├── tsconfig.json
 ├── README.md                            # wechat-channel 库文档
 ├── docs/
@@ -254,9 +289,8 @@ wechat-agent-channel/                    # 仓库根
 │   └── wechat-api.test.ts               # ilink 端点契约测试
 └── legacy/                              # 老的 Claude bot 实现, 存档, 不维护
     ├── README.md                        # 说明: 这是上个实验, 仅作历史参考
-    ├── package.json                     # 老的 package.json 全文
-    ├── src/                             # 老的 src/ 整棵
-    ├── test/                            # 老的 test/ 整棵
+    ├── src/                             # 老的 src/ 整棵(源码, 不带 package.json/node_modules)
+    ├── test/                            # 老的 test/ 整棵(源码)
     └── ...
 ```
 
@@ -290,38 +324,39 @@ wechat-agent-channel/                    # 仓库根
 | `test/bot/send.test.ts` | `test/outbound.test.ts`(适配新 API) |
 | `test/bot/streaming.test.ts` | **`legacy/test/bot/streaming.test.ts`** |
 | `test/bot/markdown-filter.test.ts` | **`legacy/test/bot/markdown-filter.test.ts`** |
-| 根 `package.json` | 改为 `wechat-channel`,删除 `@anthropic-ai/claude-agent-sdk` 依赖 |
-| 根 `tsconfig.json` | 保持 ESM + Node 22,引用 `src/` 不再引用 `src/claude/` 等 |
-| 根 `README.md` | 重写为 `wechat-channel` 库 README |
+| 根 `package.json` | 改为 `@wechat/channel`,删除 `@anthropic-ai/claude-agent-sdk` 依赖;加 `qrcode` 作为 `toPng/toSvg/toDataURL` 的依赖;配置 `exports` 字段支持 ESM + CJS 双入口;`publishConfig.access: "public"`(scoped 默认 private) |
+| 根 `tsconfig.json` | 拆为 `tsconfig.base.json`(ESM) + `tsconfig.cjs.json`(覆盖 `module: CommonJS`,输出到 `dist-cjs/`) |
+| 根 `README.md` | 重写为 `@wechat/channel` 库 README |
 
 ### 6.2 不迁移,直接删除
 
 - `src/bot.ts` 中手写的 markdown 清洗分支
 - 老的 `index.ts` 中的 SIGINT 优雅退出逻辑(库内由 `channel.stop()` 处理)
-- 老的 `login.ts` 中的终端二维码渲染(库内只返回 `qrcodeImg: Buffer`,渲染交给用户)
+- 老的 `login.ts` 中的终端二维码渲染(库内通过 `QRLoginHandle.toTerminal()` 实现,不依赖外部包)
 - `MEDIA:` 指令解析的代码路径(`legacy/` 完整保留,主仓库不引用)
 
 ### 6.3 `legacy/` 目录硬性约束
 
-- `legacy/package.json` 顶部加注释 `"//": "ARCHIVED — not maintained, kept for historical reference"`
-- `legacy/README.md` 第一行写明:**This directory contains an earlier CLI bot implementation. It is not part of the published `wechat-channel` package and is not maintained. To run the old bot: see legacy/README.md.**
+- **`legacy/` 不带 `package.json` 也不带 `node_modules`**——纯源码 + 静态说明
+- `legacy/README.md` 第一行写明:**This directory contains an earlier CLI bot implementation. It is not part of the published `@wechat/channel` package and is not maintained. To run the old bot: copy `legacy/src/*.ts` to a separate repo and install its dependencies manually.**
 - `legacy/` 下的代码引用一律用相对路径,不动 `src/` 的导出
 - 仓库顶层 vitest 不跑 `legacy/test/`
-- `.npmignore` / `package.json#files` 显式排除 `legacy/`,确保 npm publish 不带出去
+- `package.json#files` 显式 `["dist", "dist-cjs", "README.md"]`,**排除 `legacy/`**,确保 npm publish 不带出去
 
 ---
 
 ## 7. 测试策略
 
-### 7.1 库 (`wechat-channel`)
+### 7.1 库 (`@wechat/channel`)
 
-- **单元测试**:Store(file/memory)、crypto、inbound 解密、outbound helper、errors
+- **单元测试**:Store(file/memory)、crypto、inbound 解密、outbound helper、errors、QRLoginHandle 各渲染形态
 - **集成测试**:用 `MemoryStore` + mock `WechatApiClient`(MSW 或手写 stub)模拟:
   - 长轮询 + 多消息
   - 媒体下载/上传往返
   - errcode=-14 暂停
   - SIGINT 优雅退出
 - **契约测试**:mock `fetch` 后,断言发出的 ilink 请求体符合 `weixin-channel-api.md`
+- **CJS 入口冒烟测试**:`require("@wechat/channel")` 在 Node 22 下能正常导入并调用 `createChannel`(避免 ESM/CJS 互操作回归)
 - **`legacy/` 不进测试**——独立 vitest 配置,只手动跑
 
 ### 7.2 文档测试
@@ -360,7 +395,7 @@ wechat-agent-channel/                    # 仓库根
 ### 9.2 凭证迁移
 
 - 老的 `~/.wechat-agent-channel/credentials.json` 不再被读;改为 `~/.wechat-channel/credentials.json`(或写到 Store 的 `credentials` 键)
-- 提供一次性迁移命令(放在库内):`wechat-channel migrate-credentials <oldPath>` 把老凭证复制到新位置
+- 提供一次性迁移命令(放在库内,作为 CLI bin):`wechat-channel migrate-credentials <oldPath>` 把老凭证复制到新位置
 - `sync-buf.json` 同理迁移
 
 ### 9.3 协议文档保留
@@ -369,18 +404,22 @@ wechat-agent-channel/                    # 仓库根
 
 ### 9.4 包名
 
-- 仓库根 `package.json#name` 改为 `"wechat-channel"`
-- 如果原来 `wechat-agent-channel` 名字已被 npm 占,可以选择 unscoped `wechat-channel` 或申请 `@wechat/channel` scoped——实施规划阶段再定
+- 仓库根 `package.json#name` 改为 `"@wechat/channel"`(scoped)
+- `publishConfig.access: "public"` 确保 scoped 包公开发布
+- `import { createChannel } from "@wechat/channel"` 是用户导入路径
+- **npm 发布需 `@wechat` org 归属**——实施规划阶段确认归属;若尚未拥有,先用 unscoped 临时名 `wechat-channel` 占位,待获取 org 后迁移
 
 ---
 
-## 10. 开放问题
+## 10. 已决策的设计点
 
-1. **`channel.events` 是必须的吗?** 函数式 API 极简,但多 handler / 异步订阅会受限。倾向**保留** events 作为逃生口,但不写进 README 头部。
-2. **是否提供 CJS 入口?** 当前仓库纯 ESM,Node 22+。倾向**只 ESM**,简化打包。
-3. **包名冲突怎么办?** 见 §9.4。倾向直接 `wechat-channel`,unscoped。
-4. **`channel.loginQR()` 的形态?** 倾向返回 `{ qrcodeImg: Buffer, waitForLogin(): Promise<{ botToken, accountId, baseUrl }> }`,让用户自己决定渲染方式(终端 / web / mobile)。
-5. **legacy/ 内的 `package.json` 还要维护吗?** 倾向**只放源码 + 静态说明**,不带 `package.json` 也不带 `node_modules`——用户想跑自己 `cd legacy && npm install`。
+下面这些在 brainstorming 阶段已拍板,实施时按此执行:
+
+1. **`channel.events` 砍掉**——库只暴露 `createChannel()` + `channel.api` + `channel.loginQR()` + `channel.start/stop()`,不引入 EventEmitter
+2. **CJS 入口要做**——发布时同时提供 ESM (`dist/index.mjs`) + CJS (`dist-cjs/index.js`),`package.json#exports` 字段映射双入口
+3. **包名用 `@wechat/channel`(scoped)**——`publishConfig.access: "public"`;若 `@wechat` org 暂无归属,先用 unscoped `wechat-channel` 占位
+4. **`channel.loginQR()` 返回 `QRLoginHandle`**——同时支持 `.toTerminal()`(ASCII 字符画,无外部依赖)和 `.toPng()` / `.toSvg()` / `.toDataURL()`(依赖 `qrcode` 包)
+5. **`legacy/` 不带 `package.json`**——纯源码 + README,用户想跑老 bot 自己拷贝到独立项目
 
 ---
 
@@ -388,13 +427,16 @@ wechat-agent-channel/                    # 仓库根
 
 库实现完成的判定:
 
-- [ ] 根 `package.json` `name === "wechat-channel"`,**不依赖** `@anthropic-ai/claude-agent-sdk`
+- [ ] 根 `package.json` `name === "@wechat/channel"`,**不依赖** `@anthropic-ai/claude-agent-sdk`
 - [ ] `src/` 只包含 `wechat/` / `channel/` / `store/` + `index.ts` / `config.ts` / `errors.ts`,**无** `claude/` 或 `bot.ts`
-- [ ] `npm pack` 出一个干净的 tarball,不含 `legacy/`
-- [ ] `legacy/` 完整保存老的 Claude bot 源码 + 老 `package.json` + 老 README,带"ARCHIVED"标注
+- [ ] `npm pack` 出一个干净的 tarball,含 `dist/`(ESM) + `dist-cjs/`(CJS),**不含** `legacy/`
+- [ ] `package.json#exports` 同时声明 ESM 和 CJS 入口,CJS 入口冒烟测试通过
+- [ ] `legacy/` 完整保存老的 Claude bot **源码**(无 `package.json`),带"ARCHIVED"README 标注
 - [ ] 仓库根 `vitest run` 只跑 `test/`,不跑 `legacy/test/`
-- [ ] 两个包都能 `npm install` 到一个全新目录并跑通 vitest
-- [ ] 仓库 README 用一段 5 行代码展示"接收 + 回复"完整路径
+- [ ] `npm install` 到一个全新目录后 `vitest run` 全绿
+- [ ] 仓库 README 用一段 5 行代码展示"接收 + 回复"完整路径(纯 `createChannel`,无 agent 引用)
 - [ ] README 给出从老 `wechat-agent-channel` bot 迁移的 1:1 配置对照表(去掉 Claude 相关变量,其余平移)
+- [ ] README 给出 `channel.loginQR()` 终端 + Web 两种用法示例
 - [ ] 现有协议文档 `weixin-channel-api.md` 不动,作为契约测试的 source of truth
 - [ ] 老的 `src/index.ts` / `src/login.ts` 已迁移到 `legacy/`,根目录无 CLI 入口
+- [ ] ESM 用户 `import { createChannel } from "@wechat/channel"` 可用,CJS 用户 `const { createChannel } = require("@wechat/channel")` 也可用
