@@ -16,6 +16,7 @@
 
 import { randomBytes } from "node:crypto";
 
+import { isDev } from "../log.js";
 import type {
   BaseInfo,
   GetConfigResp,
@@ -125,6 +126,11 @@ export class WechatApiClient {
         signal: controller.signal,
       });
       const text = await res.text();
+      if (isDev) {
+        console.error(`>>> POST ${url}`);
+        console.error(`>>> REQ  ${JSON.stringify(body)}`);
+        console.error(`<<< RES ${res.status} ${text}`);
+      }
       if (!res.ok) {
         throw new Error(`POST ${endpoint} ${res.status}: ${text}`);
       }

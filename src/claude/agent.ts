@@ -138,7 +138,12 @@ export async function runClaudeTurn(
           callbacks.onToolUse?.(t.name ?? "unknown", t.input);
         }
         if (text) {
-          partialTextBuffer = text;
+          // Only seed partialTextBuffer if stream_event deltas haven't already
+          // accumulated the same content. Overwriting risks losing streamed
+          // deltas if the assistant message arrives out of order.
+          if (!partialTextBuffer) {
+            partialTextBuffer = text;
+          }
           callbacks.onAssistantMessage?.(text);
         }
         continue;

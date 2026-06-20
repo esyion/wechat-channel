@@ -21,9 +21,12 @@ import { pino, type Logger } from "pino";
 
 const level = process.env.LOG_LEVEL ?? "info";
 
+/** True when running outside production. Drives dev-only HTTP body dumps. */
+export const isDev = process.env.NODE_ENV !== "production";
+
 const wantPretty =
   process.env.LOG_PRETTY === "1" ||
-  (process.env.LOG_PRETTY !== "0" && process.env.NODE_ENV !== "production");
+  (process.env.LOG_PRETTY !== "0" && isDev);
 
 export const log: Logger = pino({
   level,

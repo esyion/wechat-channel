@@ -6,6 +6,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 
+import { isDev } from "../log.js";
 import {
   aesEcbPaddedSize,
   aesKeyHexToBase64,
@@ -100,6 +101,15 @@ export async function uploadBufferToCdn(params: {
         headers: { "Content-Type": "application/octet-stream" },
         body: new Uint8Array(ciphertext),
       });
+      if (isDev) {
+        console.error(`>>> CDN UPLOAD ${cdnUrl} bytes=${ciphertext.length}`);
+        console.error(`<<< STATUS ${res.status}`);
+        for (const [k, v] of res.headers) {
+          if (k.toLowerCase() === "x-error-message" || k.toLowerCase().startsWith("x-")) {
+            console.error(`<<< HDR ${k}: ${v}`);
+          }
+        }
+      }
       if (res.status >= 400 && res.status < 500) {
         const errMsg = res.headers.get("x-error-message") ?? (await res.text());
         throw new Error(`CDN upload client error ${res.status}: ${errMsg}`);

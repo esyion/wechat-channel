@@ -293,6 +293,7 @@ claude \
 {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"...","content":"..."}]}}
 {"type":"permission_request","request_id":"...","tool":"Bash","input":{...},"description":"..."}
 {"type":"plan_mode","request_id":"...","plan":"...","options":[...]}
+{"type":"ask","request_id":"...","question":"选择数据库","options":["Postgres","MySQL","SQLite"]}
 {"type":"result","subtype":"success","total_cost_usd":0.012,"result":"...","duration_ms":12345}
 ```
 
@@ -334,7 +335,7 @@ claude \
 
 ### 7.4 多问题并发
 
-同一 task 可能同时有 permission 和 plan——`pending_questions` 用 list 存, 逐一回答。每答完一个, runner 检查是否还有 pending, 没有就 resume。
+同一 task 可能同时有多个 permission / plan / ask——每一问在 `pending_questions` 表里**占一行** (按 `task_id` 一对多)。runner 依次回答: 收到用户回复 → 关联到对应 pending_questions 行 (按 created_at 最早未回答) → 写回 stdin → 检查是否还有 pending, 没有就 resume。
 
 ---
 
@@ -411,7 +412,8 @@ src/
 └── store/                   # 重写
     ├── index.ts             # better-sqlite3 单例
     ├── schema.sql           # 表结构
-    └── migrations.ts        # 迁移 (从 JSON 迁移到 SQLite)
+    ├── migrations.ts        # 迁移 (从 JSON 迁移到 SQLite)
+    └── sync-buf.ts          # 微信长轮询游标 (从 state/sync-buf.ts 迁入)
 ```
 
 ---

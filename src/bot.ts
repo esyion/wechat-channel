@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import { runClaudeTurn } from "./claude/agent.js";
 import { config, requireWechatToken } from "./config.js";
-import { botLog } from "./log.js";
+import { botLog, outboundLog } from "./log.js";
 import { ContextTokenStore } from "./state/context-tokens.js";
 import { SessionStore } from "./state/sessions.js";
 import { SyncBufStore } from "./state/sync-buf.js";
@@ -23,12 +23,15 @@ import type { WeixinMessage } from "./wechat/types.js";
 
 import { buildInboundPayload } from "./bot/inbound.js";
 import { parseMediaDirectives, sendReplyMedia, sendReplyText } from "./bot/send.js";
+import { StreamingSender } from "./bot/streaming.js";
 
 const SESSION_EXPIRED_ERRCODE = -14;
 const SESSION_PAUSE_MS = 60 * 60 * 1000;
 const CONSECUTIVE_FAILURE_LIMIT = 3;
 const BACKOFF_MS = 30_000;
 const RETRY_DELAY_MS = 2_000;
+const TYPING_KEEPALIVE_MS = 5_000;
+
 
 export interface BotDeps {
   api: WechatApiClient;
@@ -173,14 +176,25 @@ async function handleInboundMessage(
     botLog.warn({ userId }, "no context_token; will skip outbound send");
   }
 
-  // Send typing indicator (best-effort)
-  if (ctxToken) {
-    void sendTypingFor(api, userId, ctxToken).catch((err) => {
-      botLog.warn({ userId, err: String(err) }, "typing indicator failed");
-    });
-  }
+  // Start typing keepalive (5s heartbeat). Stops when first text packet
+  // is sent, or on finalize/error. Best-effort; silently tolerates failures.
+  const typing = ctxToken ? new TypingKeepalive(api, userId, ctxToken) : null;
+  typing?.start();
 
-  // Call Claude
+  // Set up streaming sender so each token delta flows to WeChat live.
+  const streamer = ctxToken
+    ? new StreamingSender({
+        api,
+        toUserId: userId,
+        contextToken: ctxToken,
+        log: outboundLog.child({ userId }),
+        minChars: config.bot.streamMinChars,
+        idleMs: config.bot.streamIdleMs,
+        maxChars: config.bot.streamMaxChars,
+      })
+    : null;
+
+  // Call Claude — wire token deltas into StreamingSender.
   const existingSession = sessions.get(userId);
   const turn = await runClaudeTurn(
     {
@@ -191,8 +205,7 @@ async function handleInboundMessage(
     },
     {
       onTextChunk: (delta) => {
-        // Could pipe to typing indicator here for "still working"
-        if (delta.length > 0) process.stdout.write(`.`);
+        if (streamer) streamer.feed(delta);
       },
       onToolUse: (name, input) => {
         botLog.debug({ userId, name, inputPreview: JSON.stringify(input).slice(0, 200) }, "tool use");
@@ -201,7 +214,17 @@ async function handleInboundMessage(
     { cfg: config },
   );
 
-  process.stdout.write(`\n`);
+  // Always finalize streaming (flushes any held-back chars + FINISH packet).
+  if (streamer) {
+    try {
+      await streamer.finalize();
+    } catch (err) {
+      // finalize() is non-throwing in practice; defensive in case of refactor.
+      botLog.warn({ userId, err: String(err) }, "streaming finalize failed");
+    }
+  }
+  // First real text arrived → cancel the typing indicator.
+  typing?.stop();
 
   if (!turn.ok) {
     botLog.error({ userId, err: turn.error }, "Claude turn failed");
@@ -214,28 +237,52 @@ async function handleInboundMessage(
     return;
   }
 
-  botLog.info(
-    {
-      userId,
-      textLen: turn.finalText.length,
-      costUsd: turn.totalCostUsd?.toFixed(4) ?? "?",
-      sessionId: turn.sessionId,
-    },
-    "reply sent",
-  );
-
   if (turn.sessionId && turn.sessionId !== existingSession) {
     await sessions.set(userId, turn.sessionId);
   }
 
   if (!ctxToken) return;
 
-  // Parse MEDIA: directives
-  const parsed = parseMediaDirectives(turn.finalText);
-  if (parsed.text) {
-    await sendReplyText({ api, toUserId: userId, contextToken: ctxToken }, parsed.text);
+  // If streaming sent nothing (model returned non-streaming response or
+  // streamed only MEDIA: lines), fall back to a one-shot text send so the
+  // user still gets the reply.
+  if (!streamer?.hasStarted()) {
+    const parsed = parseMediaDirectives(turn.finalText);
+    if (parsed.text) {
+      await sendReplyText({ api, toUserId: userId, contextToken: ctxToken }, parsed.text);
+    }
+    await sendMediaFiles(api, userId, ctxToken, parsed.mediaFiles);
+    return;
   }
-  for (const filePath of parsed.mediaFiles) {
+
+  // Streaming already sent the (filtered) text. Log delivery stats.
+  botLog.info(
+    {
+      userId,
+      packets: streamer.packets.length,
+      streamedChars: streamer.sentCharCount,
+      streamingErrors: streamer.hasErrors(),
+      textLen: turn.finalText.length,
+      costUsd: turn.totalCostUsd?.toFixed(4) ?? "?",
+      sessionId: turn.sessionId,
+    },
+    "reply streamed",
+  );
+
+  // Send MEDIA: attachments as separate MessageItems (new client_ids).
+  // We parse from the original `turn.finalText` — the streamed text had
+  // MEDIA: lines stripped by StreamingSender during streaming.
+  const parsed = parseMediaDirectives(turn.finalText);
+  await sendMediaFiles(api, userId, ctxToken, parsed.mediaFiles);
+}
+
+async function sendMediaFiles(
+  api: WechatApiClient,
+  userId: string,
+  ctxToken: string,
+  paths: string[],
+): Promise<void> {
+  for (const filePath of paths) {
     try {
       await sendReplyMedia({ api, toUserId: userId, contextToken: ctxToken }, "", filePath);
     } catch (err) {
@@ -248,16 +295,75 @@ async function handleInboundMessage(
   }
 }
 
-async function sendTypingFor(api: WechatApiClient, userId: string, contextToken: string): Promise<void> {
-  // getConfig to fetch typing_ticket (cache could be added but kept simple)
-  const cfg = await api.getConfig({ ilinkUserId: userId, contextToken });
-  const ticket = cfg.typing_ticket;
-  if (!ticket) return;
-  await api.sendTyping({ ilink_user_id: userId, typing_ticket: ticket, status: 1 });
-  // Cancel after a short interval
-  setTimeout(() => {
-    api.sendTyping({ ilink_user_id: userId, typing_ticket: ticket, status: 2 }).catch(() => {});
-  }, 3000).unref?.();
+/**
+ * Heartbeat-based "typing" indicator.
+ *
+ * Fires the FIRST status=1 packet immediately so the client UI shows
+ * "typing…" right away, then re-arms every `intervalMs` until `stop()`.
+ * `stop()` sends status=2 once to cancel and clears the interval.
+ *
+ * The typing_ticket is fetched lazily (and cached for the lifetime of
+ * this instance) — WeChat invalidates tickets on session restart, but for
+ * a single message lifecycle that's not a concern.
+ */
+class TypingKeepalive {
+  private ticket: string | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private stopped = false;
+
+  constructor(
+    private readonly api: WechatApiClient,
+    private readonly userId: string,
+    private readonly contextToken: string,
+    private readonly intervalMs: number = TYPING_KEEPALIVE_MS,
+  ) {}
+
+  async start(): Promise<void> {
+    try {
+      const cfg = await this.api.getConfig({ ilinkUserId: this.userId, contextToken: this.contextToken });
+      this.ticket = cfg.typing_ticket ?? null;
+      if (!this.ticket) return;
+      await this.api.sendTyping({
+        ilink_user_id: this.userId,
+        typing_ticket: this.ticket,
+        status: 1,
+      });
+      this.timer = setInterval(() => {
+        void this.tick();
+      }, this.intervalMs);
+    } catch (err) {
+      botLog.warn({ userId: this.userId, err: String(err) }, "typing keepalive start failed");
+    }
+  }
+
+  stop(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (this.ticket) {
+      this.api
+        .sendTyping({ ilink_user_id: this.userId, typing_ticket: this.ticket, status: 2 })
+        .catch(() => {});
+    }
+  }
+
+  private async tick(): Promise<void> {
+    if (!this.ticket) return;
+    try {
+      await this.api.sendTyping({
+        ilink_user_id: this.userId,
+        typing_ticket: this.ticket,
+        status: 1,
+      });
+    } catch (err) {
+      botLog.warn({ userId: this.userId, err: String(err) }, "typing keepalive tick failed");
+      // Stop heartbeat on persistent failure — don't keep retrying.
+      this.stop();
+    }
+  }
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {

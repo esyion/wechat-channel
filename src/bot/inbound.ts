@@ -4,8 +4,9 @@
  */
 
 import { mkdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { resolve } from "node:path";
 
+import { isDev } from "../log.js";
 import type { MediaAttachment } from "../claude/agent.js";
 import { inboundLog } from "../log.js";
 import { downloadAndDecryptCdn } from "../wechat/media.js";
@@ -72,7 +73,9 @@ export async function buildInboundPayload(args: {
 }): Promise<InboundPayload> {
   const { api, mediaTmpDir, msg } = args;
   const userId = msg.from_user_id ?? "unknown";
-  const userDir = join(mediaTmpDir, sanitizeUserId(userId));
+  // 文档 §5.0.1 / §14.5: MEDIA: 指令要求绝对路径;用 resolve 把入站图片存为
+  // 绝对路径,Claude 写 MEDIA: 时也会原样用绝对路径,匹配 send.ts 的正则。
+  const userDir = resolve(mediaTmpDir, sanitizeUserId(userId));
   await mkdir(userDir, { recursive: true });
 
   const itemList = msg.item_list ?? [];
@@ -80,6 +83,10 @@ export async function buildInboundPayload(args: {
   const media: MediaAttachment[] = [];
 
   for (const item of itemList) {
+    if (isDev) {
+      // 完整 dump item,方便对比入站 vs 出站 image_item 结构
+      console.error(`>>> INBOUND item type=${item.type} ${JSON.stringify(item)}`);
+    }
     if (item.type === MessageItemType.TEXT && item.text_item?.text != null) {
       text = String(item.text_item.text);
       continue;
@@ -110,7 +117,7 @@ export async function buildInboundPayload(args: {
         });
         const ext = extFromFilename(getFilenameFromItem(item), "image/jpeg");
         const mime = inferImageMime(`x${ext}`);
-        const path = join(userDir, `img-${Date.now()}${ext}`);
+        const path = resolve(userDir, `img-${Date.now()}${ext}`);
         const { writeFile } = await import("node:fs/promises");
         await writeFile(path, buf);
         media.push({ path, mime });
@@ -132,7 +139,7 @@ export async function buildInboundPayload(args: {
           label: "file",
         });
         const name = f.file_name ?? `file-${Date.now()}.bin`;
-        const path = join(userDir, name);
+        const path = resolve(userDir, name);
         const { writeFile } = await import("node:fs/promises");
         await writeFile(path, buf);
         media.push({ path, mime: "application/octet-stream" });
@@ -154,7 +161,7 @@ export async function buildInboundPayload(args: {
           label: "voice",
         });
         const ext = extFromFilename(getFilenameFromItem(item), "audio/silk");
-        const path = join(userDir, `voice-${Date.now()}${ext}`);
+        const path = resolve(userDir, `voice-${Date.now()}${ext}`);
         const { writeFile } = await import("node:fs/promises");
         await writeFile(path, buf);
         media.push({ path, mime: "audio/silk" });
@@ -175,7 +182,7 @@ export async function buildInboundPayload(args: {
           ...(v.media?.full_url ? { fullUrl: v.media.full_url } : {}),
           label: "video",
         });
-        const path = join(userDir, `video-${Date.now()}.mp4`);
+        const path = resolve(userDir, `video-${Date.now()}.mp4`);
         const { writeFile } = await import("node:fs/promises");
         await writeFile(path, buf);
         media.push({ path, mime: "video/mp4" });

@@ -27,6 +27,12 @@ export interface Config {
     blockedUsers: Set<string>;
     mediaTmpDir: string;
     accountStateDir: string;
+    /** Min chars to trigger an immediate streaming flush. Default 200. */
+    streamMinChars: number;
+    /** Idle ms before forcing a streaming flush. Default 3000. */
+    streamIdleMs: number;
+    /** Hard cap per streaming packet. Default 4000 (matches WeChat max text). */
+    streamMaxChars: number;
   };
 }
 
@@ -76,6 +82,9 @@ export const config: Config = {
     blockedUsers: new Set(envList("BLOCKED_USERS")),
     mediaTmpDir: envStr("MEDIA_TMP_DIR", "./tmp/media"),
     accountStateDir: envStr("ACCOUNT_STATE_DIR", `${process.env.HOME}/.wechat-agent-channel`),
+    streamMinChars: envInt("STREAM_MIN_CHARS", 200),
+    streamIdleMs: envInt("STREAM_IDLE_MS", 3000),
+    streamMaxChars: envInt("STREAM_MAX_CHARS", 4000),
   },
 };
 
