@@ -109,9 +109,9 @@ Replace existing `package.json` with:
     "node": ">=22"
   },
   "dependencies": {
-    "@paulmillr/qr": "^0.4.0",
     "dotenv": "^16.4.5",
     "pino": "^10.3.1",
+    "qr": "^0.6.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
@@ -272,7 +272,8 @@ export interface RequestedQr {
 export async function requestQrCode(api: WechatApiClient, opts: { botType?: string }): Promise<RequestedQr>;
 
 /** Step 1b: decode qrcode_img_content into a 2D boolean matrix.
- *  Uses @paulmillr/qr (small pure-JS decoder). Returns rows × cols, true = dark. */
+ *  Uses `qr` package (active successor to deprecated @paulmillr/qr).
+ *  Parses the data URL → PNG buffer → qr.decode → boolean matrix. Returns rows × cols, true = dark. */
 export async function decodeQrMatrix(qrcodeImgContent: string): Promise<boolean[][]>;
 
 /** Step 2: poll get_qrcode_status until terminal state. Caller passes onVerifyCode
@@ -289,9 +290,31 @@ export async function pollQrLogin(
 ): Promise<LoginResult>;
 ```
 
-Implementation: extract the body of `runLoginFlow` into `requestQrCode` + `pollQrLogin`. The `runLoginFlow` export becomes a 20-line wrapper that wires callbacks. `decodeQrMatrix` uses `@paulmillr/qr`'s `decode` API.
+Implementation: extract the body of `runLoginFlow` into `requestQrCode` + `pollQrLogin`. The `runLoginFlow` export becomes a 20-line wrapper that wires callbacks. `decodeQrMatrix` uses the `qr` package's `decode(buffer)` API:
 
-Update `package.json#dependencies` to add `"@paulmillr/qr": "^0.4.0"` (already in Task 1).
+```ts
+import { decode as qrDecode } from "qr";
+import { Buffer } from "node:buffer";
+
+export async function decodeQrMatrix(qrcodeImgContent: string): Promise<boolean[][]> {
+  // qrcodeImgContent is typically "data:image/png;base64,XXXXX"
+  const m = qrcodeImgContent.match(/^data:image\/png;base64,(.+)$/);
+  if (!m) throw new Error("unexpected qrcode_img_content format");
+  const buf = Buffer.from(m[1]!, "base64");
+  const result = qrDecode(buf, { errorCorrectionLevel: "medium" });
+  // `result` is { data, version, modules, ... }; modules is { size, data } where data is Uint8Array
+  const { size, data } = result.modules;
+  const matrix: boolean[][] = [];
+  for (let r = 0; r < size; r++) {
+    const row: boolean[] = [];
+    for (let c = 0; c < size; c++) row.push(Boolean(data[r * size + c]));
+    matrix.push(row);
+  }
+  return matrix;
+}
+```
+
+`package.json#dependencies` already includes `"qr": "^0.6.0"` (set in Task 1).
 
 - [ ] **Step 4: Verify build still works**
 
