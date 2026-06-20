@@ -185,10 +185,12 @@ Replace existing `package.json` with:
 Run: `npm install`
 Expected: removes `@anthropic-ai/claude-agent-sdk` + `qrcode-terminal`; adds `qrcode` + `@types/qrcode`.
 
-- [ ] **Step 6: Verify nothing imports removed modules**
+- [ ] **Step 6: Verify package.json no longer declares removed packages**
 
-Run: `grep -rn "@anthropic-ai/claude-agent-sdk\|qrcode-terminal" src/ test/ || echo "no imports"`
-Expected: `no imports`
+Run: `grep -E '"@anthropic-ai/claude-agent-sdk"|"qrcode-terminal"' package.json || echo "no deps"`
+Expected: `no deps`
+
+(Note: existing `src/claude/agent.ts` and `src/login.ts` still import these packages. Their removal is owned by Tasks 2 and 15 respectively — out of scope here.)
 
 - [ ] **Step 7: Commit**
 
