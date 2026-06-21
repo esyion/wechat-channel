@@ -32,7 +32,7 @@ export type MediaPhase = "download" | "decrypt" | "upload" | "encrypt";
 
 export class MediaError extends Error {
   readonly phase: MediaPhase;
-  readonly cause: unknown;
+  override readonly cause: unknown;
   constructor(phase: MediaPhase, cause: unknown, message?: string) {
     super(message ?? `media ${phase} failed: ${String(cause)}`);
     this.name = "MediaError";
