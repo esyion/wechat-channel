@@ -1,7 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const SvgRenderer = require("qrcode/lib/renderer/svg.js");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const QRCode = require("qrcode/lib/core/qrcode.js");
 
 import { toBuffer as qrToBuffer, toDataURL as qrToDataURL } from "qrcode";
 
@@ -48,15 +46,6 @@ export function createQRLoginHandle(opts: CreateQRLoginOpts): QRLoginHandle {
       const margin = o?.margin ?? 2;
       const size = opts.matrix.length;
       const totalSize = size + margin * 2;
-      const data: boolean[] = [];
-      // Build flat data array row by row (qrcode uses row-major order)
-      for (let r = 0; r < size; r++) {
-        for (let c = 0; c < size; c++) {
-          // Margin handling: cells in margin zone are "light" (false)
-          const inMargin = r < margin || r >= size - margin || c < margin || c >= size - margin;
-          data.push(inMargin ? false : !!opts.matrix[r]![c]);
-        }
-      }
       // Build a minimal qrData object that SvgRenderer expects
       const qrData = {
         modules: {
