@@ -16,7 +16,6 @@
 
 import { randomBytes } from "node:crypto";
 
-import { isDev } from "../log.js";
 import type {
   BaseInfo,
   GetConfigResp,
@@ -43,6 +42,7 @@ export interface ApiClientOptions extends CommonOpts {
   defaultTimeoutMs?: number;
   /** Default timeout for long-poll (getUpdates). */
   longPollTimeoutMs?: number;
+  logger?: { debug: (obj: object, msg?: string) => void };
 }
 
 export class WechatApiClient {
@@ -53,6 +53,7 @@ export class WechatApiClient {
   private readonly botAgent: string;
   private readonly defaultTimeoutMs: number;
   private readonly longPollTimeoutMs: number;
+  private readonly logger?: { debug: (obj: object, msg?: string) => void };
 
   constructor(opts: ApiClientOptions & { cdnBaseUrl: string }) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
@@ -62,6 +63,7 @@ export class WechatApiClient {
     this.botAgent = opts.botAgent;
     this.defaultTimeoutMs = opts.defaultTimeoutMs ?? 15_000;
     this.longPollTimeoutMs = opts.longPollTimeoutMs ?? 35_000;
+    this.logger = opts.logger;
   }
 
   setBotToken(token: string): void {
@@ -126,11 +128,7 @@ export class WechatApiClient {
         signal: controller.signal,
       });
       const text = await res.text();
-      if (isDev) {
-        console.error(`>>> POST ${url}`);
-        console.error(`>>> REQ  ${JSON.stringify(body)}`);
-        console.error(`<<< RES ${res.status} ${text}`);
-      }
+      this.logger?.debug({ url, method: "POST", req: body, resStatus: res.status, resBody: text });
       if (!res.ok) {
         throw new Error(`POST ${endpoint} ${res.status}: ${text}`);
       }
