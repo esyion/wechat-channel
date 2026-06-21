@@ -107,6 +107,8 @@ export async function pollQrLogin(
     signal?: AbortSignal;
     onVerifyCode?: (prompt: string) => Promise<string>;
     onStatus?: (status: QrStatus, info?: Record<string, unknown>) => void | Promise<void>;
+    /** Called when the QR code has expired and a new one has been fetched; receives the new img content. */
+    onQrRefresh?: (qrcodeImgContent: string) => void | Promise<void>;
   },
 ): Promise<LoginResult> {
   const timeoutMs = opts.timeoutMs ?? 480_000;
@@ -169,6 +171,7 @@ export async function pollQrLogin(
         const refreshed = await api.getBotQrcode({ botType: "3" });
         currentQrcode = refreshed.qrcode;
         pendingVerifyCode = undefined;
+        await opts.onQrRefresh?.(refreshed.qrcode_img_content);
         break;
       }
       case "binded_redirect":
@@ -227,8 +230,6 @@ export interface LoginOpts {
   signal?: AbortSignal;
 }
 
-const MAX_QR_REFRESH = 3;
-
 /** Wires requestQrCode + pollQrLogin with the existing LoginOpts callbacks.
  *  Preserves the verify-code / refresh / redirect state machine exactly. */
 export async function runLoginFlow(opts: LoginOpts): Promise<LoginResult> {
@@ -244,99 +245,15 @@ export async function runLoginFlow(opts: LoginOpts): Promise<LoginResult> {
 
   await opts.onQrCode?.(qr.qrcodeImgContent);
 
-  // 2. Long-poll status
-  const deadline = Date.now() + (opts.timeoutMs ?? 480_000);
-  let pendingVerifyCode: string | undefined;
-  let refreshCount = 0;
-  let currentQrcode = qr.qrcode;
-
-  while (Date.now() < deadline) {
-    if (opts.signal?.aborted) {
-      return { connected: false, message: "aborted" };
-    }
-
-    let status: Awaited<ReturnType<typeof opts.api.getQrcodeStatus>>;
-    try {
-      status = await opts.api.getQrcodeStatus({
-        qrcode: currentQrcode,
-        ...(pendingVerifyCode ? { verifyCode: pendingVerifyCode } : {}),
-        timeoutMs: 35_000,
-      });
-    } catch {
-      await sleep(1000, opts.signal);
-      continue;
-    }
-
-    const s = status.status as QrStatus;
-    await opts.onStatus?.(s, { botId: status.ilink_bot_id, hasBotToken: Boolean(status.bot_token) });
-
-    switch (s) {
-      case "wait":
-        break;
-      case "scaned":
-        if (pendingVerifyCode) pendingVerifyCode = undefined;
-        break;
-      case "need_verifycode": {
-        if (!opts.onVerifyCode) {
-          return { connected: false, message: "Server requested verify code but no handler provided" };
-        }
-        const prompt = pendingVerifyCode
-          ? "You entered the wrong code. Please retry:"
-          : "Enter the 6-digit code shown on WeChat:";
-        const code = await opts.onVerifyCode(prompt);
-        pendingVerifyCode = code.trim();
-        continue;
-      }
-      case "expired":
-      case "verify_code_blocked": {
-        refreshCount += 1;
-        if (refreshCount > MAX_QR_REFRESH) {
-          return {
-            connected: false,
-            message: `QR expired ${MAX_QR_REFRESH} times. Please retry later.`,
-          };
-        }
-        const refreshed = await opts.api.getBotQrcode({ botType });
-        currentQrcode = refreshed.qrcode;
-        const newQr = await requestQrCode(opts.api, { botType });
-        pendingVerifyCode = undefined;
-        await opts.onQrRefresh?.(newQr.qrcodeImgContent);
-        break;
-      }
-      case "binded_redirect":
-        return {
-          connected: false,
-          alreadyConnected: true,
-          message: "Already connected to this OpenClaw instance.",
-        };
-      case "scaned_but_redirect": {
-        if (status.redirect_host) {
-          return {
-            connected: false,
-            message: `IDC redirect required to ${status.redirect_host}. Please re-run login.`,
-          };
-        }
-        break;
-      }
-      case "confirmed": {
-        if (!status.ilink_bot_id) {
-          return { connected: false, message: "Login confirmed but ilink_bot_id missing" };
-        }
-        return {
-          connected: true,
-          botToken: status.bot_token,
-          accountId: status.ilink_bot_id,
-          baseUrl: status.baseurl ?? opts.api.baseUrl,
-          userId: status.ilink_user_id,
-          message: "Login confirmed.",
-        };
-      }
-    }
-
-    await sleep(1000, opts.signal);
-  }
-
-  return { connected: false, message: "Login timed out" };
+  // 2. Delegate polling to pollQrLogin
+  return await pollQrLogin(opts.api, {
+    qrcode: qr.qrcode,
+    timeoutMs: opts.timeoutMs,
+    signal: opts.signal,
+    onVerifyCode: opts.onVerifyCode,
+    onStatus: opts.onStatus,
+    onQrRefresh: opts.onQrRefresh,
+  });
 }
 
 // ---------------------------------------------------------------------------
