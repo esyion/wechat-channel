@@ -1,7 +1,3 @@
-// TODO: This test will pass once Task 15 resolves the pre-existing tsc errors
-// that currently prevent `dist-cjs/index.js` from being emitted by `npm run build`.
-// At that point, `npm run build && npx vitest run test/cjs-smoke.test.ts` should yield 1 passed.
-
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
