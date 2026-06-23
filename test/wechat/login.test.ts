@@ -32,8 +32,15 @@ describe("decodeQrMatrix", () => {
     expect(darkCount).toBeLessThan(flat.length);
   });
 
-  it("throws for an invalid data URL", async () => {
-    await expect(decodeQrMatrix("not-a-data-url")).rejects.toThrow();
+  it("treats a plain URL as text input and encodes it as QR", async () => {
+    const matrix = await decodeQrMatrix("https://example.com/login?qrcode=abc123&bot_type=3");
+    expect(matrix.length).toBeGreaterThan(0);
+    expect(matrix[0]!.length).toBeGreaterThan(0);
+    expect(matrix.length).toBe(matrix[0]!.length);
+    // Should contain both dark and light modules
+    const flat = matrix.flat();
+    expect(flat.filter(Boolean).length).toBeGreaterThan(0);
+    expect(flat.filter(Boolean).length).toBeLessThan(flat.length);
   });
 
   it("throws for a non-QR PNG", async () => {
