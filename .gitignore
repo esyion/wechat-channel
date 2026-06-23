@@ -18,3 +18,7 @@ examples/*/dist/
 
 *.tsbuildinfo
 examples/*/node_modules/
+
+# docs (not for distribution)
+weixin-channel-api.md
+docs/superpowers/
