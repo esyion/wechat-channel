@@ -1,6 +1,6 @@
-# @wechat/channel · Debug Panel
+# @esyion/wechat-channel · Debug Panel
 
-Reference example showing a complete end-to-end integration of [`@wechat/channel`](../../):
+Reference example showing a complete end-to-end integration of [`@esyion/wechat-channel`](../../):
 
 - QR-code login (with PNG / SVG / terminal-ASCII renderers)
 - Channel lifecycle (start / stop / status)
@@ -26,7 +26,7 @@ Reference example showing a complete end-to-end integration of [`@wechat/channel
 │  MessageList · live    │                           │   ├─ logged_in           │
 │  ReplyBox · upload     │                           │   └─ channel_running     │
 └────────────────────────┘                           │                          │
-                                                     │  @wechat/channel         │
+                                                     │  @esyion/wechat-channel         │
                                                      │   ├─ loginQR             │
                                                      │   ├─ createChannel       │
                                                      │   └─ onMessage → SSE     │
@@ -50,7 +50,7 @@ Reference example showing a complete end-to-end integration of [`@wechat/channel
 
 ## Setup
 
-This example lives inside the `@wechat/channel` monorepo and resolves the
+This example lives inside the `@esyion/wechat-channel` monorepo and resolves the
 library via a relative `link:` reference.
 
 ```bash
@@ -59,7 +59,7 @@ pnpm install                  # installs library deps + builds dist/
 pnpm build                    # makes dist/ and dist-cjs/ available for linking
 
 cd examples/debug-panel
-pnpm install                  # creates node_modules; @wechat/channel is symlinked
+pnpm install                  # creates node_modules; @esyion/wechat-channel is symlinked
 ```
 
 ## Run

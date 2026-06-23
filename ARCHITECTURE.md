@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes how `@wechat/channel` is wired internally. For installation and quick start, see [README.md](./README.md). For API reference, see [API.md](./API.md) (planned). For the design rationale, see [`docs/superpowers/specs/2026-06-21-wechat-channel-library-design.md`](./docs/superpowers/specs/2026-06-21-wechat-channel-library-design.md).
+This document describes how `@esyion/wechat-channel` is wired internally. For installation and quick start, see [README.md](./README.md). For API reference, see [API.md](./API.md) (planned). For the design rationale, see [`docs/superpowers/specs/2026-06-21-wechat-channel-library-design.md`](./docs/superpowers/specs/2026-06-21-wechat-channel-library-design.md).
 
 ## Why this library exists
 
-`@wechat/channel` is an **agent-agnostic bridge** between the WeChat ilink long-poll protocol and user-defined message handlers. It owns:
+`@esyion/wechat-channel` is an **agent-agnostic bridge** between the WeChat ilink long-poll protocol and user-defined message handlers. It owns:
 
 - The WeChat protocol layer (long-poll, media I/O, login, crypto)
 - Per-message state (context tokens, sync cursor)

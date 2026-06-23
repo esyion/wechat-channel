@@ -1,13 +1,13 @@
-# @wechat/channel
+# @esyion/wechat-channel
 
 > Agent-agnostic WeChat ilink channel library — bridges the long-poll protocol to user-defined message handlers.
 
-[![npm](https://img.shields.io/npm/v/@wechat/channel)](https://www.npmjs.com/package/@wechat/channel)
-[![license](https://img.shields.io/npm/l/@wechat/channel)](./LICENSE)
-[![node](https://img.shields.io/node/v/@wechat/channel)](https://nodejs.org)
+[![npm](https://img.shields.io/npm/v/@esyion/wechat-channel)](https://www.npmjs.com/package/@esyion/wechat-channel)
+[![license](https://img.shields.io/npm/l/@esyion/wechat-channel)](./LICENSE)
+[![node](https://img.shields.io/node/v/@esyion/wechat-channel)](https://nodejs.org)
 [![types](https://img.shields.io/badge/types-included-blue)](./src)
 
-`@wechat/channel` owns the WeChat protocol layer (long-poll loop, media I/O, login, crypto, state persistence) and exposes a tiny `onMessage(msg, reply)` hook. You bring your own agent — Claude, GPT, RAG, or hand-written business logic. The library never imports an agent SDK.
+`@esyion/wechat-channel` owns the WeChat protocol layer (long-poll loop, media I/O, login, crypto, state persistence) and exposes a tiny `onMessage(msg, reply)` hook. You bring your own agent — Claude, GPT, RAG, or hand-written business logic. The library never imports an agent SDK.
 
 For internal design, see [ARCHITECTURE.md](./ARCHITECTURE.md). For the underlying protocol, see [`weixin-channel-api.md`](./weixin-channel-api.md).
 
@@ -36,13 +36,13 @@ For internal design, see [ARCHITECTURE.md](./ARCHITECTURE.md). For the underlyin
 ## Install
 
 ```bash
-npm install @wechat/channel
+npm install @esyion/wechat-channel
 ```
 
 ## Quick start
 
 ```ts
-import { createChannel } from "@wechat/channel";
+import { createChannel } from "@esyion/wechat-channel";
 
 const channel = await createChannel({
   botToken: process.env.WECHAT_BOT_TOKEN!,
@@ -64,7 +64,7 @@ First time only — obtain `botToken` and `accountId` via QR scan, then put them
 ### Terminal
 
 ```ts
-import { createChannel } from "@wechat/channel";
+import { createChannel } from "@esyion/wechat-channel";
 
 const channel = await createChannel({ botToken: "", accountId: "" }); // dummy; not used by login
 const qr = await channel.loginQR();
@@ -215,10 +215,10 @@ Both entry points are exported from `package.json#exports`:
 
 ```ts
 // ESM
-import { createChannel } from "@wechat/channel";
+import { createChannel } from "@esyion/wechat-channel";
 
 // CJS
-const { createChannel } = require("@wechat/channel");
+const { createChannel } = require("@esyion/wechat-channel");
 ```
 
 TypeScript types are included — no `@types/...` package needed.

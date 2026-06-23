@@ -8,7 +8,7 @@ importers:
 
   .:
     dependencies:
-      '@wechat/channel':
+      '@esyion/wechat-channel':
         specifier: link:../..
         version: link:../..
       cors:

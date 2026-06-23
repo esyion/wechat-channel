@@ -1,6 +1,6 @@
 /**
  * Wire-format types shared between React frontend and Express backend.
- * Keep this file dependency-free (no imports from @wechat/channel).
+ * Keep this file dependency-free (no imports from @esyion/wechat-channel).
  */
 
 export type AppPhase =

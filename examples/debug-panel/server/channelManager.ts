@@ -1,5 +1,5 @@
 /**
- * ChannelManager — single source of truth for the @wechat/channel lifecycle.
+ * ChannelManager — single source of truth for the @esyion/wechat-channel lifecycle.
  *
  * Phase machine:
  *
@@ -8,7 +8,7 @@
  *     │                      └─cancel / error                 │                     │
  *     └──────────────────────────────────────────────────── stop ┘
  *
- * Reply routing: the @wechat/channel public API only exposes `reply` inside
+ * Reply routing: the @esyion/wechat-channel public API only exposes `reply` inside
  * the onMessage callback. We capture every inbound reply handle in a Map keyed
  * by `msgId`, so the React UI can call `POST /api/reply { messageId, text }`
  * after the message has been delivered to the browser. Entries expire after a
@@ -21,7 +21,7 @@ import {
   type ChannelMsg,
   type Reply,
   type QRLoginHandle,
-} from "@wechat/channel";
+} from "@esyion/wechat-channel";
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -51,7 +51,7 @@ interface PendingReply {
   expiresAt: number;
 }
 
-/** Plain Error subclass for app-level errors that aren't part of @wechat/channel's enum. */
+/** Plain Error subclass for app-level errors that aren't part of @esyion/wechat-channel's enum. */
 class AppError extends Error {
   readonly code: string;
   constructor(code: string, message: string) {

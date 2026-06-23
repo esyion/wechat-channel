@@ -1,8 +1,8 @@
 {
-  "name": "@wechat/channel-debug-panel",
+  "name": "@esyion/wechat-channel-debug-panel",
   "private": true,
   "version": "0.0.0",
-  "description": "Debug UI for @wechat/channel — Vite + React frontend + Express backend with SSE. Reference example showing login, long-poll, and media reply flows end-to-end.",
+  "description": "Debug UI for @esyion/wechat-channel — Vite + React frontend + Express backend with SSE. Reference example showing login, long-poll, and media reply flows end-to-end.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,7 @@
     "dev:all": "concurrently -k -n FE,BE -c cyan,magenta \"pnpm dev\" \"pnpm server\""
   },
   "dependencies": {
-    "@wechat/channel": "link:../..",
+    "@esyion/wechat-channel": "link:../..",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
