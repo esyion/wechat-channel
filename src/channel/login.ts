@@ -1,5 +1,8 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const SvgRenderer = require("qrcode/lib/renderer/svg.js");
+// @ts-expect-error qrcode doesn't ship types for this internal sub-path
+import * as SvgRendererNs from "qrcode/lib/renderer/svg.js";
+const SvgRenderer = SvgRendererNs as unknown as {
+  render: (data: unknown, opts: { margin: number; width: number }) => string;
+};
 
 import { toBuffer as qrToBuffer, toDataURL as qrToDataURL } from "qrcode";
 

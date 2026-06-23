@@ -64,21 +64,33 @@ export async function requestQrCode(
   return { qrcode: qr.qrcode, qrcodeImgContent: qr.qrcode_img_content };
 }
 
-/** Step 1b: decode qrcode_img_content into a 2D boolean matrix.
- *  Uses `qr` package (active successor to deprecated @paulmillr/qr).
- *  Parses the data URL → PNG buffer → decodeQR → detect → boolean matrix.
- *  Returns rows × cols, true = dark. */
+/** Step 1b: turn `qrcode_img_content` into a 2D boolean matrix.
+ *
+ * Three accepted shapes (per the ilink protocol doc):
+ *   - `data:image/png;base64,XXX` — embedded PNG; decode → recover text → re-encode matrix
+ *   - `https://liteapp.weixin.qq.com/q/...?qrcode=...&bot_type=N` — the QR *encodes* this URL;
+ *     scanning opens the URL in WeChat which signals the login. Just encode the URL directly.
+ *   - `weixin://...` — WeChat deep link; encode as text. (Rare; documented but rarely seen.)
+ *
+ * Returns rows × cols, true = dark module.
+ */
 export async function decodeQrMatrix(qrcodeImgContent: string): Promise<boolean[][]> {
-  // qrcodeImgContent is typically "data:image/png;base64,XXXXX"
-  const m = qrcodeImgContent.match(/^data:image\/png;base64,(.+)$/);
-  if (!m) throw new Error("unexpected qrcode_img_content format");
-  const buf = Buffer.from(m[1]!, "base64");
-  const png = PNG.sync.read(buf);
-  if (!png?.height || !png?.width || !png?.data) throw new Error("invalid PNG");
-  // decodeQR expects RGBA image { height, width, data }
-  const img = { height: png.height, width: png.width, data: png.data };
-  const text = decodeQR(img);
-  // Re-encode the decoded text to get a clean bitmap we can sample
+  const dataMatch = qrcodeImgContent.match(/^data:image\/png;base64,(.+)$/);
+  if (dataMatch) {
+    const buf = Buffer.from(dataMatch[1]!, "base64");
+    const png = PNG.sync.read(buf);
+    if (!png?.height || !png?.width || !png?.data) throw new Error("invalid PNG");
+    const img = { height: png.height, width: png.width, data: png.data };
+    const text = decodeQR(img);
+    return textToQrMatrix(text);
+  }
+  // HTTP(S) URL or arbitrary text — encode directly. The WeChat scanner reads
+  // the QR and dispatches the URL to the ilink service.
+  return textToQrMatrix(qrcodeImgContent);
+}
+
+/** Encode `text` as a clean boolean matrix via the `qr` package. */
+function textToQrMatrix(text: string): boolean[][] {
   const bits = encodeQR(text, "raw", { scale: 4 });
   if (!bits[0]) throw new Error("encodeQR returned empty result");
   const bm = new Bitmap({ width: bits[0].length, height: bits.length }, bits);

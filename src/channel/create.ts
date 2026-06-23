@@ -123,6 +123,10 @@ export async function createChannel(opts: CreateChannelOpts): Promise<ChannelHan
           timeoutMs: waitOpts?.timeoutMs ?? loginOpts?.timeoutMs ?? 120_000,
           signal: waitOpts?.signal ?? loginOpts?.signal,
         });
+        // DIAG: log the raw LoginResult so we can see what ilink actually returned.
+        // Remove once the underlying API/protocol is patched.
+        // eslint-disable-next-line no-console
+        console.log("[diag] pollQrLogin raw result:", JSON.stringify(result));
         return { botToken: result.botToken!, accountId: result.accountId!, baseUrl: result.baseUrl ?? baseUrl };
       },
     });
