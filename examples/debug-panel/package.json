@@ -1,0 +1,46 @@
+{
+  "name": "@wechat/channel-debug-panel",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Debug UI for @wechat/channel — Vite + React frontend + Express backend with SSE. Reference example showing login, long-poll, and media reply flows end-to-end.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "server": "tsx watch server/index.ts",
+    "dev:all": "concurrently -k -n FE,BE -c cyan,magenta \"pnpm dev\" \"pnpm server\""
+  },
+  "dependencies": {
+    "@wechat/channel": "link:../..",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "multer": "^2.2.0",
+    "pino": "^10.3.1",
+    "qr": "^0.6.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.1.0",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "tsx": "^4.19.2",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12"
+  }
+}

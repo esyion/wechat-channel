@@ -17,3 +17,4 @@ examples/*/server/uploads/
 examples/*/dist/
 
 *.tsbuildinfo
+examples/*/node_modules/
