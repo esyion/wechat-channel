@@ -1,9 +1,12 @@
 /**
  * AES-128-ECB + PKCS7 crypto utilities for CDN media.
  *
- * Two aes_key encodings are seen in the wild:
- *   - base64(raw 16 bytes)              → images (ImageItem.aeskey is hex; we convert here)
- *   - base64(hex string of 16 bytes)   → file / voice / video (CDNMedia.aes_key)
+ * `aes_key` outbound encoding (per `weixin-channel-api.md` §14.3):
+ *   For all outbound messages using `media.aes_key` (image / video / file),
+ *   the value is `base64(hex_key_string_ascii)`. The receiver does 2-step
+ *   decode: base64 → string → hex → raw 16-byte key.
+ *
+ *   `image_item.aeskey` is sent as the raw hex string (no base64 wrapping).
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
@@ -65,9 +68,22 @@ export function parseAesKey(aesKeyBase64: string): Buffer {
   );
 }
 
-/** Convert hex AES key to base64 string for outbound CDNMedia.aes_key. */
+/**
+ * Convert a hex AES key (32-char string, e.g. "00112233...") to the
+ * `media.aes_key` field encoding for outbound messages.
+ *
+ * Stores the HEX STRING's ASCII bytes as base64 — NOT the raw key bytes.
+ * The receiver then does base64 decode → hex decode → raw 16-byte key.
+ *
+ * Example with key `00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff`:
+ *   hex string:     "00112233445566778899aabbccddeeff"   (32 ASCII chars)
+ *   this returns:   "MDAxMTIyMzM0NDU1NjY3Nzg4OTlhYWJiY2NjZGRlZWZm"  (44 chars)
+ *
+ * Old buggy behavior was `base64(<raw 16 bytes>)` = "ABEiM0RVZneImaq7zN3u/w=="
+ * (24 chars) — produces a key the receiver can't decrypt.
+ */
 export function aesKeyHexToBase64(hexKey: string): string {
-  return Buffer.from(hexKey, "hex").toString("base64");
+  return Buffer.from(hexKey, "utf8").toString("base64");
 }
 
 /** Convert hex AES key to raw 16-byte Buffer. */

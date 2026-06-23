@@ -11,6 +11,12 @@
 
 For internal design, see [ARCHITECTURE.md](./ARCHITECTURE.md). For the underlying protocol, see [`weixin-channel-api.md`](./weixin-channel-api.md).
 
+## Examples
+
+| Example | What it shows |
+|---|---|
+| [`examples/debug-panel/`](./examples/debug-panel/) | Full debug UI — Vite + React frontend, Express backend, SSE live updates, QR login, long-poll, text/media reply. **Start here.** |
+
 ## Features
 
 - **Long-poll driver** with `errcode=-14` 1-hour pause + backoff on network errors
