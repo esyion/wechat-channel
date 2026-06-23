@@ -25,6 +25,8 @@ await channel.start();
 
 ## Login
 
+> First time only — obtain `botToken` and `accountId` via QR scan, then put them in `.env`.
+
 ```ts
 const qr = await channel.loginQR();
 console.log(qr.toTerminal());           // terminal users
@@ -34,6 +36,17 @@ const { botToken, accountId } = await qr.waitForLogin();
 ```
 
 ## Migrating from old `wechat-agent-channel` bot
+
+| Old | New |
+|---|---|
+| `WECHAT_BOT_TOKEN` | `WECHAT_BOT_TOKEN` (unchanged) |
+| `WECHAT_ACCOUNT_ID` | `WECHAT_ACCOUNT_ID` (unchanged) |
+| `ANTHROPIC_API_KEY` | (drop — your agent manages this) |
+| `CLAUDE_MODEL` | (drop) |
+| `CLAUDE_WORK_DIR` | (drop) |
+| `~/.wechat-agent-channel/credentials.json` | run `npx wechat-channel migrate-credentials ~/.wechat-agent-channel` |
+| `npm start` (CLI bot) | run your own `await channel.start()` from Quick start above |
+| `npm run login` | call `channel.loginQR()` programmatically (see Login section) |
 
 | Old | New |
 |---|---|
