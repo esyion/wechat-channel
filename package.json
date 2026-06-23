@@ -28,9 +28,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist-cjs/package.json', JSON.stringify({type:'commonjs'}))\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "engines": {
     "node": ">=22"

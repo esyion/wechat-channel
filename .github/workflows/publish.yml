@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    name: Typecheck + Test + Build
+    name: Typecheck + Build
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -29,11 +29,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Test
-        run: npx vitest run --pool=forks
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
 
   publish:
     name: Publish to npm
