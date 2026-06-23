@@ -1,45 +1,39 @@
 # @esyion/wechat-channel
 
-> Agent-agnostic WeChat ilink channel library — bridges the long-poll protocol to user-defined message handlers.
-
 [![npm](https://img.shields.io/npm/v/@esyion/wechat-channel)](https://www.npmjs.com/package/@esyion/wechat-channel)
 [![license](https://img.shields.io/npm/l/@esyion/wechat-channel)](./LICENSE)
 [![node](https://img.shields.io/node/v/@esyion/wechat-channel)](https://nodejs.org)
-[![types](https://img.shields.io/badge/types-included-blue)](./src)
 
-`@esyion/wechat-channel` owns the WeChat protocol layer (long-poll loop, media I/O, login, crypto, state persistence) and exposes a tiny `onMessage(msg, reply)` hook. You bring your own agent — Claude, GPT, RAG, or hand-written business logic. The library never imports an agent SDK.
+> 基于 WeChat ilink 协议的 Node.js 库。**一行 `onMessage` 回调 = 接入任意 AI**。
 
-For internal design, see [ARCHITECTURE.md](./ARCHITECTURE.md). For the underlying protocol, see [`weixin-channel-api.md`](./weixin-channel-api.md).
+---
 
-## Examples
+## 5 分钟快速集成
 
-| Example | What it shows |
-|---|---|
-| [`examples/debug-panel/`](./examples/debug-panel/) | Full debug UI — Vite + React frontend, Express backend, SSE live updates, QR login, long-poll, text/media reply. **Start here.** |
-
-## Features
-
-- **Long-poll driver** with `errcode=-14` 1-hour pause + backoff on network errors
-- **Agent-agnostic**: bring any handler — no SDK coupling
-- **Per-user sessions**: `context_token` auto-persisted, ready for any agent's session store
-- **Full media support**: download/decrypt inbound images/files/voice/video; upload/send outbound
-- **QR login** with **4 renderers**: terminal ASCII, PNG buffer, SVG string, data URL — works for CLI bots, web apps, and embedded use
-- **Typing heartbeat** — `reply.typing(true)` keeps the WeChat "typing…" indicator alive
-- **Pluggable `Store`** interface — ship with `JsonFileStore` (default) or `MemoryStore` (testing); bring your own Redis/Postgres impl
-- **Dual ESM + CJS** with full TypeScript types included
-
-## Requirements
-
-- Node.js **≥ 22**
-- TypeScript 5+ if using TypeScript (consumer project)
-
-## Install
+### 1. 安装
 
 ```bash
 npm install @esyion/wechat-channel
 ```
 
-## Quick start
+要求 Node.js ≥ 22。
+
+### 2. 扫码登录拿凭证
+
+```ts
+import { createChannel } from "@esyion/wechat-channel";
+
+const ch = await createChannel({ botToken: "placeholder", accountId: "placeholder" });
+const qr = await ch.loginQR();
+
+console.log(qr.toTerminal());  // 终端显示二维码
+// 或者 Web 场景: <img src={await qr.toDataURL({ size: 400 })} />
+
+const { botToken, accountId } = await qr.waitForLogin();
+// ↑ 把这两个值存到 .env 或配置文件里
+```
+
+### 3. 开始收发消息
 
 ```ts
 import { createChannel } from "@esyion/wechat-channel";
@@ -48,170 +42,137 @@ const channel = await createChannel({
   botToken: process.env.WECHAT_BOT_TOKEN!,
   accountId: process.env.WECHAT_ACCOUNT_ID!,
   onMessage: async (msg, reply) => {
-    await reply.text(`echo: ${msg.text}`);
+    // msg.text        — 文本内容
+    // msg.fromUserId  — 发送者
+    // msg.media       — 已解密的图片/文件/视频
+
+    await reply.text(`你说了: ${msg.text}`);
+    await reply.media("/path/to/image.png");
+    await reply.typing(true);  // "正在输入…"
   },
 });
 
 await channel.start();
 ```
 
-That's the entire pipeline. The library handles long-polling, media decryption, message persistence, and graceful shutdown — you focus on the reply.
+### 4. 完整示例
 
-## Login
+[`examples/debug-panel/`](./examples/debug-panel/) 是一个可直接运行的调试面板：
 
-First time only — obtain `botToken` and `accountId` via QR scan, then put them in `.env`.
-
-### Terminal
-
-```ts
-import { createChannel } from "@esyion/wechat-channel";
-
-const channel = await createChannel({ botToken: "", accountId: "" }); // dummy; not used by login
-const qr = await channel.loginQR();
-
-console.log(qr.toTerminal());            // ASCII block chars, ready for stdout
-const { botToken, accountId } = await qr.waitForLogin();
-console.log(`Set these in your .env:\n  WECHAT_BOT_TOKEN=${botToken}\n  WECHAT_ACCOUNT_ID=${accountId}`);
+```
+Vite + React 前端  ──HTTP/SSE──▶  Express 后端  ──createChannel──▶  WeChat
+(登录/消息/回复)                   (状态机/事件广播)                  (ilink 长轮询)
 ```
 
-### Web
-
-```ts
-const qr = await channel.loginQR();
-const dataUrl = await qr.toDataURL({ size: 400 });   // data:image/png;base64,...
-res.send(`<img src="${dataUrl}" />`);
-const { botToken, accountId } = await qr.waitForLogin({ signal: reqAbortSignal });
+```bash
+cd examples/debug-panel
+pnpm install && pnpm dev:all
+# 浏览器打开 http://localhost:5173
 ```
 
-Other renderers:
+启动后你就能看到完整的登录→消息→回复流程，**也可以直接把它当作你的 bot 管理面板来用**。
 
-```ts
-qr.toPng({ size: 400 });                  // Promise<Buffer> — write to file or pipe
-qr.toSvg({ margin: 2 });                  // string — embed inline in HTML
-qr.matrix;                               // boolean[][] — render however you like
-```
+---
 
-## API tour
+## 核心概念
 
-### `createChannel(opts)` → `Promise<ChannelHandle>`
+### `createChannel(opts)` → 通道句柄
 
-| Option | Default | Purpose |
+| 参数 | 默认值 | 说明 |
 |---|---|---|
-| `botToken` | (required) | From `loginQR().waitForLogin()` |
-| `accountId` | (required) | Same |
-| `baseUrl` | `https://ilinkai.weixin.qq.com` | Override for staging / proxy gateway |
-| `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | Override for self-hosted CDN |
-| `stateDir` | `~/.wechat-channel` | Where `JsonFileStore` persists by default |
-| `store` | `new JsonFileStore(stateDir + "/store.json")` | Inject a custom `Store` (Redis, etc.) |
-| `longPollTimeoutMs` | `35_000` | Server hold time |
-| `mediaTmpDir` | `<stateDir>/media` | Where inbound media is decrypted |
-| `blockedUsers` | `undefined` | `Set<string>` of user IDs to silently drop |
-| `onMessage` | `undefined` | `(msg, reply) => void` — your agent lives here |
-| `onError` | `console.error` | `(err, { phase }) => void` — see Error model below |
+| `botToken` | — | 微信机器人令牌（从 loginQR 获取） |
+| `accountId` | — | 微信机器人账号 ID |
+| `onMessage` | — | 收到消息的回调 `(msg, reply) => void` |
+| `onError` | `console.error` | 错误回调，带 `phase` 区分阶段 |
+| `store` | `JsonFileStore` | 会话持久化接口，可换 Redis |
+| `baseUrl` | `https://ilinkai.weixin.qq.com` | ilink 网关地址 |
+| `cdnBaseUrl` | `https://novac2c.cdn.weixin.qq.com/c2c` | CDN 地址 |
+| `stateDir` | `~/.wechat-channel` | 状态文件目录 |
+| `longPollTimeoutMs` | `35000` | 长轮询超时 |
+| `blockedUsers` | — | 屏蔽的用户 ID 集合 |
 
-Returns `{ api, start, stop, loginQR }`. See [ARCHITECTURE.md](./ARCHITECTURE.md#data-flow-a-message-lifecycle) for the runtime model.
-
-### `reply` — outbound helpers
-
-```ts
-onMessage: async (msg, reply) => {
-  // Plain text (auto-chunks at maxChars; default 4000)
-  await reply.text("hello!");
-
-  // File/image/video (MIME auto-detected from extension)
-  await reply.media("/abs/path/to/photo.png");
-  await reply.media("/abs/path/to/report.pdf", "Here's the report you asked for");
-
-  // Typing indicator — start/stop heartbeat
-  await reply.typing(true);
-  // ... long-running work ...
-  await reply.typing(false);
-}
-```
-
-### `msg` — inbound message
+### 收到的消息 `msg`
 
 ```ts
 interface ChannelMsg {
-  fromUserId: string;
-  contextToken: string;
-  text: string;
-  media: ReadonlyArray<{ path: string; mime: string }>;  // already decrypted to disk
-  raw: WeixinMessage;                                     // full protocol payload (advanced)
+  fromUserId: string;           // 发送者微信 ID
+  contextToken: string;         // 会话 token（自动按用户持久化）
+  text: string;                 // 文本内容
+  media: Array<{                // 已解密到磁盘的媒体文件
+    path: string;               //   本地绝对路径
+    mime: string;               //   文件类型
+  }>;
+  raw: WeixinMessage;           // 完整协议结构（高级用法）
 }
 ```
 
-Inbound media is decrypted **before** your handler runs. `msg.media[i].path` points to a file you can read, pipe, or pass to an agent's tool.
+### 回复 `reply`
 
-### Graceful shutdown
+```ts
+await reply.text("你好");                    // 文本（自动处理分块）
+await reply.media("/path/photo.png");        // 图片/文件/视频
+await reply.media("/path/doc.pdf", "说明");   // 媒体 + 文字说明
+await reply.typing(true);                    // 开启"正在输入"心跳
+await reply.typing(false);                   // 停止
+```
+
+### 登录 `loginQR()`
+
+| 渲染方式 | 适用场景 |
+|---|---|
+| `qr.toTerminal()` | SSH 终端 / 命令行 |
+| `qr.toDataURL()` | Web 页面 `<img src>` |
+| `qr.toSvg()` | 内联 SVG |
+| `qr.toPng()` | 文件写入 / 推送 |
+| `qr.matrix` | 自定义渲染 |
+
+### 错误处理
+
+```ts
+const channel = await createChannel({
+  onError: (err, ctx) => {
+    if (ctx?.phase === "sessionExpired") {
+      // 微信 session 过期，长轮询会自动暂停 1 小时
+    } else if (ctx?.phase === "decrypt") {
+      // 媒体解密失败，单条消息跳过，不影响后续
+    }
+  },
+});
+```
+
+错误**不会**中断长轮询循环——下一条消息继续正常处理。
+
+### 优雅退出
 
 ```ts
 const ac = new AbortController();
 process.on("SIGINT", () => ac.abort());
-process.on("SIGTERM", () => ac.abort());
 
 await channel.start({ signal: ac.signal });
-// On SIGINT: long-poll aborts, store flushes, api.notifyStop() fires, then process.exit(0)
+// SIGINT → 长轮询中止 → 状态落盘 → 通知下线 → exit(0)
 ```
 
-If you don't pass a signal, call `await channel.stop()` yourself.
+或者手动 `await channel.stop()`。
 
-## Error model
+---
 
-Errors fall into three classes (full details in [ARCHITECTURE.md](./ARCHITECTURE.md#error-model)):
+## API 参考
 
-| Class | Fires when | `phase` (if `MediaError`) |
-|---|---|---|
-| `ChannelError` | Bad input, double `start()`, etc. — synchronous | — |
-| `WechatApiError` | ilink server non-zero `ret`/`errcode`, HTTP failure | — |
-| `MediaError` | File download / decrypt / upload / encrypt failure | `download` / `decrypt` / `upload` / `encrypt` |
+### 公开类型
 
-`onError` receives `{ phase }` so you can route:
+所有类型随包发布，无需额外安装 `@types/...`：
 
 ```ts
-onError: (err, ctx) => {
-  if (ctx?.phase === "sessionExpired") {
-    log.warn("wechat session expired; channel will resume in 1 hour");
-  } else {
-    log.error({ err, phase: ctx?.phase }, "channel error");
-  }
-}
+import {
+  createChannel,
+  ChannelMsg, Reply,
+  QRLoginHandle, LoginResult,
+  Store, JsonFileStore, MemoryStore,
+  ChannelError, WechatApiError, MediaError,
+} from "@esyion/wechat-channel";
 ```
 
-Handler errors (`onMessage` throws) and inbound errors (media download fails) are reported but do **not** crash the long-poll loop — the next inbound message is processed normally.
-
-## Environment variables
-
-All optional. `createChannel()` reads these via `loadEnvOverrides("WECHAT_CHANNEL_")` — the prefix is optional.
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `WECHAT_BOT_TOKEN` | (none) | Required to start |
-| `WECHAT_ACCOUNT_ID` | (none) | Required to start |
-| `WECHAT_BASE_URL` | `https://ilinkai.weixin.qq.com` | Override ilink gateway |
-| `WECHAT_CDN_BASE_URL` | `https://novac2c.cdn.weixin.qq.com/c2c` | Override CDN |
-| `WECHAT_CHANNEL_STATE_DIR` | `~/.wechat-channel` | `JsonFileStore` location |
-| `LONG_POLL_TIMEOUT_MS` | `35000` | Long-poll hold time |
-| `WECHAT_BOT_TYPE` | `3` | ilink `bot_type` for `loginQR()` |
-
-## Migrating from old `wechat-agent-channel` bot
-
-If you previously used the bundled CLI bot that wrapped Claude Agent SDK, here's how the surface changed:
-
-| Old | New |
-|---|---|
-| `WECHAT_BOT_TOKEN` | `WECHAT_BOT_TOKEN` (unchanged) |
-| `WECHAT_ACCOUNT_ID` | `WECHAT_ACCOUNT_ID` (unchanged) |
-| `ANTHROPIC_API_KEY` | (drop — your agent manages this) |
-| `CLAUDE_MODEL` | (drop) |
-| `CLAUDE_WORK_DIR` | (drop) |
-| `~/.wechat-agent-channel/credentials.json` | run `npx wechat-channel migrate-credentials ~/.wechat-agent-channel` |
-| `npm start` (CLI bot) | run your own `await channel.start()` from Quick start above |
-| `npm run login` | call `channel.loginQR()` programmatically (see Login section) |
-
-## ESM + CJS
-
-Both entry points are exported from `package.json#exports`:
+### 双格式入口
 
 ```ts
 // ESM
@@ -221,25 +182,12 @@ import { createChannel } from "@esyion/wechat-channel";
 const { createChannel } = require("@esyion/wechat-channel");
 ```
 
-TypeScript types are included — no `@types/...` package needed.
+---
 
-## CLI: `wechat-channel migrate-credentials`
+## 发布历史
 
-A one-shot helper for users upgrading from `wechat-agent-channel`:
+| 版本 | 说明 |
+|---|---|
+| v0.1.0 | 首次发布。扫码登录、长轮询、媒体加解密、输入状态 |
 
-```bash
-npx wechat-channel migrate-credentials ~/.wechat-agent-channel
-```
-
-Copies `credentials.json`, `sync-buf.json`, `context-tokens.json` from the old state dir to the new one (`~/.wechat/channel` by default; override with `WECHAT_CHANNEL_STATE_DIR`).
-
-## See also
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — internal design, data flow, state schema, error model
-- [`docs/superpowers/specs/2026-06-21-wechat-channel-library-design.md`](./docs/superpowers/specs/2026-06-21-wechat-channel-library-design.md) — full design spec
-- [`weixin-channel-api.md`](./weixin-channel-api.md) — underlying ilink protocol reference
-- [`legacy/`](./legacy/) — the previous CLI bot, archived for reference only
-
-## License
-
-MIT
+[MIT](./LICENSE)
