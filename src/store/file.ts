@@ -7,6 +7,16 @@ interface FileState {
   data: Record<string, string>;
 }
 
+/**
+ * JSON-file-backed `Store`. Atomic-ish writes via a `.tmp` swap, with a
+ * coalesced write queue so concurrent `set()` / `delete()` calls are serialized.
+ *
+ * On first access, loads the entire file into memory; subsequent reads are
+ * served from the in-memory map. Writes are kept in memory and flushed to
+ * disk via `set()`'s awaited promise chain (or eagerly via `flush()`).
+ *
+ * Tolerant of ENOENT (returns empty store on first run).
+ */
 export class JsonFileStore implements Store {
   private state: FileState = { data: {} };
   private loaded = false;

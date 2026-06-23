@@ -33,6 +33,20 @@ export interface ChannelHandle {
   loginQR(opts?: { botType?: string; timeoutMs?: number; signal?: AbortSignal }): Promise<QRLoginHandle>;
 }
 
+/**
+ * Create a fully-wired WeChat channel handle.
+ *
+ * Main entry point. Validates auth credentials, resolves defaults (env overrides +
+ * hardcoded fallbacks), constructs a `WechatApiClient` and a `Store` (defaults to
+ * `JsonFileStore` at `~/.wechat-channel/store.json`), and returns a `ChannelHandle`
+ * you can `start()` to begin long-polling.
+ *
+ * The library is agent-agnostic: pass `onMessage(msg, reply)` to react to inbound
+ * messages with whatever logic you want (Claude, GPT, RAG, business workflow).
+ *
+ * @throws {@link ChannelError} `"AUTH_REQUIRED"` if `botToken` is empty
+ * @throws {@link ChannelError} `"INVALID_TOKEN"` if `accountId` is empty
+ */
 export async function createChannel(opts: CreateChannelOpts): Promise<ChannelHandle> {
   if (!opts.botToken) throw new ChannelError("AUTH_REQUIRED", "botToken is required");
   if (!opts.accountId) throw new ChannelError("INVALID_TOKEN", "accountId is required");

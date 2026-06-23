@@ -1,5 +1,11 @@
 import type { Store } from "./types.js";
 
+/**
+ * In-process `Map`-backed `Store`. Useful for tests and ephemeral bots.
+ *
+ * Data does not survive process restart. `flush()` is a no-op since all
+ * writes are synchronous.
+ */
 export class MemoryStore implements Store {
   private readonly map = new Map<string, string>();
 

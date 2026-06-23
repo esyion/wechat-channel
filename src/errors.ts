@@ -1,5 +1,10 @@
 export type ChannelErrorCode = "AUTH_REQUIRED" | "INVALID_TOKEN" | "ABORTED";
 
+/**
+ * Lifecycle / configuration error from the channel layer itself (not from
+ * the WeChat server). Thrown synchronously by `createChannel()` for bad
+ * inputs, and by `start()` if called twice without an intervening `stop()`.
+ */
 export class ChannelError extends Error {
   readonly code: ChannelErrorCode;
   constructor(code: ChannelErrorCode, message: string) {
@@ -15,6 +20,13 @@ export interface WechatApiErrorPayload {
   errmsg?: string;
 }
 
+/**
+ * Error returned by the WeChat ilink server or the HTTP transport layer.
+ *
+ * `errcode === -14` ("session expired") triggers the long-poll loop's 1-hour
+ * pause; all other non-zero ret/errcode values are surfaced via `onError`
+ * with `phase: "getUpdates"` or `phase: "sessionExpired"`.
+ */
 export class WechatApiError extends Error {
   readonly ret?: number;
   readonly errcode?: number;
@@ -30,6 +42,14 @@ export class WechatApiError extends Error {
 
 export type MediaPhase = "download" | "decrypt" | "upload" | "encrypt";
 
+/**
+ * Media I/O failure (download / decrypt / upload / encrypt). Always wraps
+ * a `cause: unknown` from the underlying fs / crypto / network call.
+ *
+ * Inbound (`"download"`, `"decrypt"`) failures are reported via
+ * `onError({ phase: "inbound" })` and the message is dropped; outbound
+ * (`"upload"`, `"encrypt"`) failures throw synchronously from `reply.media()`.
+ */
 export class MediaError extends Error {
   readonly phase: MediaPhase;
   override readonly cause: unknown;
