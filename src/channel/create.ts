@@ -4,10 +4,8 @@ import { JsonFileStore } from "../store/file.js";
 import { MemoryStore } from "../store/memory.js";
 import type { Store } from "../store/types.js";
 import { WechatApiClient } from "../wechat/api.js";
-import { decodeQrMatrix, pollQrLogin, requestQrCode } from "../wechat/login.js";
 import { runLongPoll } from "./long-poll.js";
-import { createQRLoginHandle } from "./login.js";
-import type { ChannelMsg, QRLoginHandle, Reply } from "./types.js";
+import type { ChannelMsg, Reply } from "./types.js";
 
 export interface CreateChannelOpts {
   botToken: string;
@@ -30,7 +28,6 @@ export interface ChannelHandle {
   api: WechatApiClient;
   start(opts?: { signal?: AbortSignal }): Promise<void>;
   stop(): Promise<void>;
-  loginQR(opts?: { botType?: string; timeoutMs?: number; signal?: AbortSignal }): Promise<QRLoginHandle>;
 }
 
 /**
@@ -111,22 +108,5 @@ export async function createChannel(opts: CreateChannelOpts): Promise<ChannelHan
     loopPromise = null;
   }
 
-  async function loginQR(loginOpts?: { botType?: string; timeoutMs?: number; signal?: AbortSignal }): Promise<QRLoginHandle> {
-    const botType = loginOpts?.botType ?? opts.botType ?? "3";
-    const { qrcode, qrcodeImgContent } = await requestQrCode(api, { botType });
-    const matrix = await decodeQrMatrix(qrcodeImgContent);
-    return createQRLoginHandle({
-      matrix,
-      waitForLogin: async (waitOpts) => {
-        const result = await pollQrLogin(api, {
-          qrcode,
-          timeoutMs: waitOpts?.timeoutMs ?? loginOpts?.timeoutMs ?? 120_000,
-          signal: waitOpts?.signal ?? loginOpts?.signal,
-        });
-        return { botToken: result.botToken!, accountId: result.accountId!, baseUrl: result.baseUrl ?? baseUrl };
-      },
-    });
-  }
-
-  return { api, start, stop, loginQR };
+  return { api, start, stop };
 }

@@ -65,7 +65,7 @@ export interface LoginResult {
 }
 
 /**
- * Login handle returned by `channel.loginQR()`. Exposes the raw QR matrix plus
+ * Login handle returned by the top-level `loginQR()`. Exposes the raw QR matrix plus
  * four render helpers covering terminal (ASCII), PNG buffer, SVG string, and
  * data URL — so the same handle works for CLI bots, web apps, and embedded use.
  *

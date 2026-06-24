@@ -17,6 +17,7 @@
 
 import {
   createChannel,
+  loginQR,
   type ChannelHandle,
   type ChannelMsg,
   type Reply,
@@ -36,13 +37,6 @@ import type { SseHub } from "./sse.js";
 const MAX_BUFFER = 100;
 /** Pending reply handles expire after 10 minutes — long enough for human reply, short enough to avoid leaks. */
 const REPLY_TTL_MS = 10 * 60 * 1000;
-
-/**
- * Placeholder values for createChannel during the QR login flow.
- * The library validates that these are non-empty strings, but doesn't use them
- * for the login API call (the login API uses an ilink session, not the token).
- */
-const LOGIN_PLACEHOLDER = { botToken: "login-placeholder", accountId: "login-placeholder" };
 
 interface PendingReply {
   reply: Reply;
@@ -111,8 +105,7 @@ export class ChannelManager {
     this.qr = null;
 
     try {
-      const dummy = await createChannel(LOGIN_PLACEHOLDER);
-      const handle = await dummy.loginQR();
+      const handle = await loginQR();
 
       const [dataURL, svg, terminal] = await Promise.all([
         handle.toDataURL({ size: 360 }),
@@ -147,10 +140,9 @@ export class ChannelManager {
 
   private async awaitLogin(handle: QRLoginHandle, signal: AbortSignal): Promise<void> {
     try {
-      // NOTE: `handle.waitForLogin()` returns a STRIPPED object —
-      // { botToken, accountId, baseUrl } — see src/channel/create.ts:126.
-      // The full LoginResult (with connected/message/userId) is internal.
-      // We can only validate against the fields the wrapper exposes.
+      // NOTE: `handle.waitForLogin()` resolves to { botToken, accountId, baseUrl }.
+      // On login failure it throws ChannelError("AUTH_REQUIRED") — see
+      // src/channel/login-flow.ts. The full internal LoginResult is not exposed.
       const result = await handle.waitForLogin({ signal });
       if (!result.botToken || !result.accountId) {
         const keys = Object.keys(result).join(",");
