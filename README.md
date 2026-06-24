@@ -21,10 +21,9 @@ npm install @esyion/wechat-channel
 ### 2. 扫码登录拿凭证
 
 ```ts
-import { createChannel } from "@esyion/wechat-channel";
+import { loginQR } from "@esyion/wechat-channel";
 
-const ch = await createChannel({ botToken: "placeholder", accountId: "placeholder" });
-const qr = await ch.loginQR();
+const qr = await loginQR();  // 无需任何凭证
 
 console.log(qr.toTerminal());  // 终端显示二维码
 // 或者 Web 场景: <img src={await qr.toDataURL({ size: 400 })} />
@@ -118,6 +117,8 @@ await reply.typing(false);                   // 停止
 
 ### 登录 `loginQR()`
 
+`loginQR()` 是顶层导出，独立于 `createChannel`，登录阶段无需任何 token。
+
 | 渲染方式 | 适用场景 |
 |---|---|
 | `qr.toTerminal()` | SSH 终端 / 命令行 |
@@ -188,6 +189,7 @@ const { createChannel } = require("@esyion/wechat-channel");
 
 | 版本 | 说明 |
 |---|---|
+| v0.2.0 | **破坏性变更**：登录改为顶层 `loginQR()`，不再是 `channel.loginQR()`。登录无需占位 token |
 | v0.1.0 | 首次发布。扫码登录、长轮询、媒体加解密、输入状态 |
 
 [MIT](./LICENSE)
