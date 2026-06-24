@@ -1,4 +1,5 @@
 export { createChannel, type CreateChannelOpts, type ChannelHandle } from "./channel/create.js";
+export { loginQR, type LoginQROpts } from "./channel/login-flow.js";
 export type { ChannelMsg, MediaRef, Reply, ReplyTextOpts } from "./channel/types.js";
 export type { QRLoginHandle, LoginResult, QrTerminalOpts, QrPngOpts, QrSvgOpts, WaitForLoginOpts } from "./channel/types.js";
 export type { Store } from "./store/types.js";
