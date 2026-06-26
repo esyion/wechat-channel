@@ -32,7 +32,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist-cjs/package.json', JSON.stringify({type:'commonjs'}))\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --pool=forks --passWithNoTests",
+    "test:watch": "vitest --pool=forks"
   },
   "engines": {
     "node": ">=22"
@@ -49,6 +51,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/qrcode": "^1.5.5",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.9"
   }
 }

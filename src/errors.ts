@@ -1,4 +1,4 @@
-export type ChannelErrorCode = "AUTH_REQUIRED" | "INVALID_TOKEN" | "ABORTED";
+export type ChannelErrorCode = "AUTH_REQUIRED" | "INVALID_TOKEN" | "ABORTED" | "INVALID_BOT_ID";
 
 /**
  * Lifecycle / configuration error from the channel layer itself (not from
