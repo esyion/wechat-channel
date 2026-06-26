@@ -1,8 +1,0 @@
-{
-  "name": "wechat-channel-multibot-example",
-  "private": true,
-  "type": "module",
-  "scripts": { "verify": "tsx verify.ts" },
-  "dependencies": { "@esyion/wechat-channel": "link:../.." },
-  "devDependencies": { "tsx": "^4.19.0" }
-}
