@@ -28,7 +28,12 @@ await manager.startAll();
 console.log("当前在线:", manager.list());
 
 await bind("bot-a");
-await rl.question("绑定第二个 bot？回车继续，Ctrl-C 退出 ");
+// 不用 rl.question：顶层创建的 rl 在 waitForLogin 长轮询期间会被 Node 自动
+// close，再 question 会抛 ERR_USE_AFTER_CLOSE。改用一次性 stdin 监听。
+await new Promise<void>((resolve) => {
+  process.stdout.write("绑定第二个 bot？回车继续，Ctrl-C 退出\n");
+  process.stdin.once("data", () => resolve());
+});
 await bind("bot-b");
 
 console.log("\n两个 bot 已在线。分别给两个微信号发消息，观察上面的回显。");
