@@ -6,6 +6,17 @@
 
 > 基于 WeChat ilink 协议的 Node.js 库。**一行 `onMessage` 回调 = 接入任意 AI**。
 
+## 功能演示
+
+支持 **text / voice / image / video** 四种消息类型的完整收发。下面是真实运行截图：
+
+| 📱 真实微信客户端 | 🖥️ 调试面板 |
+| --- | --- |
+| ![用户向 bot 发文字/语音/图片/视频，bot 自动回复](docs/images/IMG_1983.PNG) | ![long-poll 收到消息 + agent 回复 + SSE 实时推送](docs/images/Snipaste_2026-06-24_23-58-50.png) |
+| *手机端用户视角：文字、语音、图片、视频全部正常显示与播放* | *服务端视角：消息流 + 自动回复 + 状态机 + 运行日志* |
+
+可运行的完整示例见 [`examples/debug-panel/`](./examples/debug-panel/) 与 [`examples/multi-bot/`](./examples/multi-bot/)。
+
 ---
 
 ## 5 分钟快速集成
@@ -154,6 +165,46 @@ await channel.start({ signal: ac.signal });
 ```
 
 或者手动 `await channel.stop()`。
+
+---
+
+## 多 Bot 托管
+
+一套服务同时托管多个微信号时用 `createBotManager()`。它是 `createChannel`（单 bot）之上的薄管理层：每个 bot 对应一个平台用户，所有消息走同一个回调，回调首参 `botId` 标识来源，方便你按 bot 做会话隔离。
+
+```ts
+import { loginQR, createBotManager } from "@esyion/wechat-channel";
+
+const manager = createBotManager({
+  onMessage: async (botId, msg, reply) => {
+    // botId 标识是哪个微信号收到的消息，用它做隔离
+    console.log(`[${botId}] 收到: ${msg.text}`);
+    await reply.text(`收到，你是 ${botId}`);
+  },
+  onError: (botId, err, ctx) => {
+    console.error(`[${botId}] 错误 (${ctx?.phase}):`, err);
+  },
+});
+
+// 1. 恢复已绑定的 bot（从凭证存储读回，逐个启动）
+await manager.startAll();
+
+// 2. 扫码登录拿到凭证后，动态绑定一个新 bot
+const qr = await loginQR();
+console.log(qr.toTerminal());
+const creds = await qr.waitForLogin();   // { botToken, accountId }
+await manager.add("bot-a", creds);        // 存盘 + 启动
+
+// 3. 退出时停掉所有 bot
+process.on("SIGINT", async () => {
+  await manager.stopAll();
+  process.exit(0);
+});
+```
+
+`manager.list()` 查看在线 bot 及状态，`manager.get(botId)` 拿到底层 `ChannelHandle`，`manager.remove(botId, { purge: true })` 停掉并删除凭证。完整可运行示例见 [`examples/multi-bot/`](./examples/multi-bot/)。
+
+> ⚠️ `botToken` 是敏感登录态。默认的 `JsonBotCredentialStore` 将凭证**明文**存盘（`<stateDir>/bots.json`）。生产环境建议传入自定义 `credentialStore` 接入加密存储。
 
 ---
 

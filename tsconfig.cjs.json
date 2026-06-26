@@ -9,5 +9,5 @@
     "declarationMap": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "dist-cjs", "legacy", "test"]
+  "exclude": ["node_modules", "dist", "dist-cjs", "legacy", "test", "**/*.test.ts"]
 }
