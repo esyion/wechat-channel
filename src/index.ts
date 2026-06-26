@@ -9,3 +9,9 @@ export { ChannelError, WechatApiError, MediaError } from "./errors.js";
 export type { ChannelErrorCode, WechatApiErrorPayload, MediaPhase } from "./errors.js";
 export { WechatApiClient, type ApiClientOptions } from "./wechat/api.js";
 export type { WeixinMessage, MessageItem } from "./wechat/types.js";
+export { createBotManager } from "./manager/create.js";
+export { JsonBotCredentialStore } from "./manager/registry.js";
+export type {
+  BotManager, BotInfo, BotCredentials,
+  BotCredentialStore, CreateBotManagerOpts,
+} from "./manager/types.js";
