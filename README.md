@@ -157,6 +157,46 @@ await channel.start({ signal: ac.signal });
 
 ---
 
+## 多 Bot 托管
+
+一套服务同时托管多个微信号时用 `createBotManager()`。它是 `createChannel`（单 bot）之上的薄管理层：每个 bot 对应一个平台用户，所有消息走同一个回调，回调首参 `botId` 标识来源，方便你按 bot 做会话隔离。
+
+```ts
+import { loginQR, createBotManager } from "@esyion/wechat-channel";
+
+const manager = createBotManager({
+  onMessage: async (botId, msg, reply) => {
+    // botId 标识是哪个微信号收到的消息，用它做隔离
+    console.log(`[${botId}] 收到: ${msg.text}`);
+    await reply.text(`收到，你是 ${botId}`);
+  },
+  onError: (botId, err, ctx) => {
+    console.error(`[${botId}] 错误 (${ctx?.phase}):`, err);
+  },
+});
+
+// 1. 恢复已绑定的 bot（从凭证存储读回，逐个启动）
+await manager.startAll();
+
+// 2. 扫码登录拿到凭证后，动态绑定一个新 bot
+const qr = await loginQR();
+console.log(qr.toTerminal());
+const creds = await qr.waitForLogin();   // { botToken, accountId }
+await manager.add("bot-a", creds);        // 存盘 + 启动
+
+// 3. 退出时停掉所有 bot
+process.on("SIGINT", async () => {
+  await manager.stopAll();
+  process.exit(0);
+});
+```
+
+`manager.list()` 查看在线 bot 及状态，`manager.get(botId)` 拿到底层 `ChannelHandle`，`manager.remove(botId, { purge: true })` 停掉并删除凭证。完整可运行示例见 [`examples/multi-bot/`](./examples/multi-bot/)。
+
+> ⚠️ `botToken` 是敏感登录态。默认的 `JsonBotCredentialStore` 将凭证**明文**存盘（`<stateDir>/bots.json`）。生产环境建议传入自定义 `credentialStore` 接入加密存储。
+
+---
+
 ## API 参考
 
 ### 公开类型
