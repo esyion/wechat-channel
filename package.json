@@ -1,6 +1,6 @@
 {
   "name": "@esyion/wechat-channel",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Agent-agnostic WeChat ilink channel library. Bridges long-poll protocol to user-defined handlers.",
   "license": "MIT",
   "repository": {
