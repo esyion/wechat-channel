@@ -42,14 +42,14 @@ export function createBotManager(opts: CreateBotManagerOpts): BotManager {
     async add(botId, c) {
       sanitizeBotId(botId);                 // 先校验，非法立刻抛（不存不建）
       const existing = bots.get(botId);
-      if (existing) { await existing.handle.stop(); bots.delete(botId); }
+      if (existing) { await existing.handle?.stop(); bots.delete(botId); }
       await creds.save(botId, c);           // 存盘失败则下一行不执行
       await startOne(botId, c);
     },
 
     async remove(botId, removeOpts) {
       const e = bots.get(botId);
-      if (e) { await e.handle.stop(); bots.delete(botId); }
+      if (e) { await e.handle?.stop(); bots.delete(botId); }
       if (removeOpts?.purge) await creds.delete(botId);
     },
 
