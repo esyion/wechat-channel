@@ -6,6 +6,17 @@
 
 > 基于 WeChat ilink 协议的 Node.js 库。**一行 `onMessage` 回调 = 接入任意 AI**。
 
+## 功能演示
+
+支持 **text / voice / image / video** 四种消息类型的完整收发。下面是真实运行截图：
+
+| 📱 真实微信客户端 | 🖥️ 调试面板 |
+| --- | --- |
+| ![用户向 bot 发文字/语音/图片/视频，bot 自动回复](docs/images/IMG_1983.PNG) | ![long-poll 收到消息 + agent 回复 + SSE 实时推送](docs/images/Snipaste_2026-06-24_23-58-50.png) |
+| *手机端用户视角：文字、语音、图片、视频全部正常显示与播放* | *服务端视角：消息流 + 自动回复 + 状态机 + 运行日志* |
+
+可运行的完整示例见 [`examples/debug-panel/`](./examples/debug-panel/) 与 [`examples/multi-bot/`](./examples/multi-bot/)。
+
 ---
 
 ## 5 分钟快速集成
