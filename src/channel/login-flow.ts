@@ -49,6 +49,7 @@ export async function loginQR(opts: LoginQROpts = {}): Promise<QRLoginHandle> {
 
   return createQRLoginHandle({
     matrix,
+    qrcodeImgContent,
     waitForLogin: async (waitOpts) => {
       const result = await pollQrLogin(api, {
         qrcode,
