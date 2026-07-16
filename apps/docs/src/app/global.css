@@ -5,10 +5,10 @@
 :root {
   --font-sans: 'Geist', 'Microsoft YaHei', 'PingFang SC', sans-serif;
   --font-mono: 'Geist Mono', 'Cascadia Code', 'SFMono-Regular', monospace;
-  --wc-ink: 16 24 20;
-  --wc-signal: 31 224 128;
-  --wc-signal-soft: 190 255 220;
-  --wc-panel: 8 13 11;
+  --fresh-ink: 20 43 45;
+  --fresh-mint: 64 196 152;
+  --fresh-sky: 90 169 232;
+  --fresh-paper: 250 253 250;
 }
 
 html {
@@ -32,19 +32,28 @@ html > body[data-scroll-locked] {
   --removed-body-scroll-bar-size: 0px !important;
 }
 
-.signal-grid {
-  background-image:
-    linear-gradient(rgba(var(--wc-signal) / 0.11) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--wc-signal) / 0.1) 1px, transparent 1px),
-    radial-gradient(circle at 18% 18%, rgba(var(--wc-signal) / 0.22), transparent 34%),
-    radial-gradient(circle at 78% 10%, rgba(94 234 212 / 0.16), transparent 28%),
-    linear-gradient(135deg, rgb(var(--wc-panel)), #06120d 62%, #020504);
-  background-size: 34px 34px, 34px 34px, auto, auto, auto;
+.fresh-canvas {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(var(--fresh-mint) / 0.18), transparent 28%),
+    radial-gradient(circle at 84% 10%, rgba(var(--fresh-sky) / 0.18), transparent 30%),
+    linear-gradient(180deg, #fbfefc 0%, #f4faf7 46%, #eef7f4 100%);
 }
 
-.terminal-card {
+.fresh-grid {
+  background-image:
+    linear-gradient(rgba(20 43 45 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20 43 45 / 0.045) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.fresh-card {
+  border: 1px solid rgba(20 43 45 / 0.08);
+  background: rgba(255 255 255 / 0.74);
   box-shadow:
-    0 0 0 1px rgba(var(--wc-signal) / 0.22),
-    0 24px 80px rgba(0 0 0 / 0.36),
-    inset 0 1px 0 rgba(255 255 255 / 0.08);
+    0 24px 80px rgba(20 43 45 / 0.08),
+    inset 0 1px 0 rgba(255 255 255 / 0.84);
+}
+
+.soft-ring {
+  box-shadow: 0 0 0 7px rgba(var(--fresh-mint) / 0.1);
 }
