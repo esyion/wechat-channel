@@ -7,22 +7,5 @@ export function baseOptions(): BaseLayoutProps {
       title: appName,
     },
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
-    links: [
-      {
-        text: 'Quick Start',
-        url: '/docs/quick-start',
-        active: 'nested-url',
-      },
-      {
-        text: 'Storage',
-        url: '/docs/storage',
-        active: 'nested-url',
-      },
-      {
-        text: 'Examples',
-        url: '/docs/examples',
-        active: 'nested-url',
-      },
-    ],
   };
 }
