@@ -1,0 +1,121 @@
+﻿---
+title: 数据存储
+description: 默认 JSON 文件、Store 接口、凭证存储和媒体文件存储的改造方式。
+---
+
+# 数据存储
+
+WeChat Channel 的数据存储分为四类：
+
+| 数据 | 默认方式 | 是否可替换 |
+| --- | --- | --- |
+| 通道状态：`sync_buf`、`ctx:<userId>` | `JsonFileStore(<stateDir>/store.json)` | 是，传入 `store` |
+| 多 Bot 凭证：`botToken`、`accountId` | `JsonBotCredentialStore(<stateDir>/bots.json)` | 是，传入 `credentialStore` |
+| 入站媒体 | 解密到本地 `mediaTmpDir` | 可改目录；远端存储需二次改造 |
+| 示例 Debug Panel 状态 | 内存数组和 Map | 示例自管 |
+
+## Store 接口
+
+```ts
+export interface Store {
+  get(key: string): Promise<string | undefined>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  flush(): Promise<void>;
+}
+```
+
+当前库会使用这些 key：
+
+| Key | 用途 |
+| --- | --- |
+| `sync_buf` | 长轮询游标，下次 `getUpdates` 继续使用 |
+| `ctx:<userId>` | 每个用户的上下文 token |
+
+所有值都是字符串。如果要存复杂结构，请自己 `JSON.stringify()`。
+
+## Redis Store 示例
+
+```ts
+import { createChannel, type Store } from '@esyion/wechat-channel';
+import Redis from 'ioredis';
+
+class RedisStore implements Store {
+  constructor(
+    private readonly redis: Redis,
+    private readonly prefix = 'wechat-channel:',
+  ) {}
+
+  async get(key: string): Promise<string | undefined> {
+    return (await this.redis.get(this.prefix + key)) ?? undefined;
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    await this.redis.set(this.prefix + key, value);
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.redis.del(this.prefix + key);
+  }
+
+  async flush(): Promise<void> {
+    // Redis 写入是即时的，这里可以 no-op
+  }
+}
+
+const channel = await createChannel({
+  botToken,
+  accountId,
+  store: new RedisStore(new Redis(process.env.REDIS_URL!)),
+  onMessage: async (msg, reply) => {
+    await reply.text(`收到：${msg.text}`);
+  },
+});
+```
+
+## 多 Bot 凭证存储
+
+生产环境不建议使用默认明文 `bots.json`。你可以实现 `BotCredentialStore`：
+
+```ts
+import {
+  createBotManager,
+  type BotCredentialStore,
+  type BotCredentials,
+} from '@esyion/wechat-channel';
+
+class SecureCredentialStore implements BotCredentialStore {
+  async save(botId: string, creds: BotCredentials): Promise<void> {
+    // 加密 creds.botToken 后写入数据库
+  }
+
+  async load(botId: string): Promise<BotCredentials | undefined> {
+    // 从数据库读取并解密
+    return undefined;
+  }
+
+  async list(): Promise<Array<{ botId: string; creds: BotCredentials }>> {
+    return [];
+  }
+
+  async delete(botId: string): Promise<void> {
+    // 删除记录
+  }
+}
+
+const manager = createBotManager({
+  credentialStore: new SecureCredentialStore(),
+  onMessage: async (botId, msg, reply) => {
+    await reply.text(`[${botId}] ${msg.text}`);
+  },
+});
+```
+
+## 媒体文件
+
+入站媒体会先被下载并解密到本地目录，然后以 `msg.media[].path` 传给你的 handler。你可以：
+
+1. 通过 `mediaTmpDir` 改变本地落盘目录；
+2. 在 `onMessage` 里把文件转存到对象存储；
+3. 定期清理本地临时文件；
+4. 如果要完全避免本地落盘，需要改造库的 `buildInbound()` 逻辑。

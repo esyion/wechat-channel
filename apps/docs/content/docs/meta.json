@@ -1,0 +1,15 @@
+﻿{
+  "title": "WeChat Channel",
+  "pages": [
+    "index",
+    "quick-start",
+    "login",
+    "channel",
+    "reply",
+    "storage",
+    "multi-bot",
+    "examples",
+    "architecture",
+    "api-reference"
+  ]
+}

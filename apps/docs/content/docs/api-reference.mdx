@@ -1,0 +1,146 @@
+﻿---
+title: API 参考
+description: 公开导出的核心类型与函数。
+---
+
+# API 参考
+
+本页是手写 API 摘要。后续可以接入 TypeDoc 自动从源码生成详细参考。
+
+## `loginQR(opts?)`
+
+申请扫码登录二维码。
+
+```ts
+const qr = await loginQR();
+console.log(qr.toTerminal());
+const { botToken, accountId, baseUrl } = await qr.waitForLogin();
+```
+
+### `QRLoginHandle`
+
+```ts
+interface QRLoginHandle {
+  matrix: boolean[][];
+  toTerminal(opts?: QrTerminalOpts): string;
+  toPng(opts?: QrPngOpts): Promise<Buffer>;
+  toSvg(opts?: QrSvgOpts): string;
+  toDataURL(opts?: QrPngOpts): Promise<string>;
+  waitForLogin(opts?: WaitForLoginOpts): Promise<LoginResult>;
+}
+```
+
+## `createChannel(opts)`
+
+创建单 Bot 通道。
+
+```ts
+const channel = await createChannel({
+  botToken,
+  accountId,
+  onMessage,
+});
+```
+
+### `CreateChannelOpts`
+
+```ts
+interface CreateChannelOpts {
+  botToken: string;
+  accountId: string;
+  baseUrl?: string;
+  cdnBaseUrl?: string;
+  channelVersion?: string;
+  botAgent?: string;
+  botType?: string;
+  stateDir?: string;
+  store?: Store;
+  onMessage?: (msg: ChannelMsg, reply: Reply) => Promise<void> | void;
+  onError?: (err: unknown, ctx?: { phase: string }) => void;
+  longPollTimeoutMs?: number;
+  mediaTmpDir?: string;
+  blockedUsers?: ReadonlySet<string>;
+}
+```
+
+### `ChannelHandle`
+
+```ts
+interface ChannelHandle {
+  api: WechatApiClient;
+  start(opts?: { signal?: AbortSignal }): Promise<void>;
+  stop(): Promise<void>;
+}
+```
+
+## `ChannelMsg`
+
+```ts
+interface ChannelMsg {
+  fromUserId: string;
+  contextToken: string;
+  text: string;
+  media: ReadonlyArray<MediaRef>;
+  raw: WeixinMessage;
+}
+```
+
+## `Reply`
+
+```ts
+interface Reply {
+  text(content: string, opts?: ReplyTextOpts): Promise<void>;
+  media(filePath: string, caption?: string): Promise<void>;
+  typing(on?: boolean): Promise<void>;
+}
+```
+
+## `Store`
+
+```ts
+interface Store {
+  get(key: string): Promise<string | undefined>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  flush(): Promise<void>;
+}
+```
+
+内置实现：
+
+- `JsonFileStore`
+- `MemoryStore`
+
+## `createBotManager(opts)`
+
+创建多 Bot 管理器。
+
+```ts
+const manager = createBotManager({
+  onMessage: async (botId, msg, reply) => {},
+});
+```
+
+### `BotManager`
+
+```ts
+interface BotManager {
+  add(botId: string, creds: BotCredentials): Promise<void>;
+  remove(botId: string, opts?: { purge?: boolean }): Promise<void>;
+  list(): BotInfo[];
+  get(botId: string): ChannelHandle | undefined;
+  startAll(): Promise<void>;
+  stopAll(): Promise<void>;
+}
+```
+
+### `BotCredentialStore`
+
+```ts
+interface BotCredentialStore {
+  save(botId: string, creds: BotCredentials): Promise<void>;
+  load(botId: string): Promise<BotCredentials | undefined>;
+  list(): Promise<Array<{ botId: string; creds: BotCredentials }>>;
+  delete(botId: string): Promise<void>;
+}
+```

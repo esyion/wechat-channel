@@ -1,0 +1,66 @@
+﻿---
+title: 架构
+description: WeChat Channel 的模块边界、消息生命周期和状态 schema。
+---
+
+# 架构
+
+`@esyion/wechat-channel` 是 WeChat ilink 协议和用户自定义 handler 之间的桥。
+
+```txt
+WeChat ilink server
+  -> WechatApiClient.getUpdates()
+  -> runLongPoll()
+  -> buildInbound()
+  -> onMessage(msg, reply)
+  -> reply.text / reply.media / reply.typing
+```
+
+## 分层
+
+| 层 | 责任 |
+| --- | --- |
+| `src/wechat/*` | ilink API、登录轮询、媒体上传下载、加解密、协议类型 |
+| `src/channel/*` | createChannel、长轮询、入站消息转换、回复 helper、typing |
+| `src/store/*` | Store 接口、JSON 文件实现、内存实现 |
+| `src/manager/*` | 多 Bot 管理、凭证存储、botId 校验 |
+| `src/index.ts` | 公共导出入口 |
+
+## 消息生命周期
+
+1. `runLongPoll()` 调用 `api.getUpdates()`。
+2. 请求时带上上次保存的 `sync_buf`。
+3. 成功响应后保存新的 `sync_buf`。
+4. 遍历 `resp.msgs`。
+5. 如果消息携带 `context_token`，写入 `ctx:<userId>`。
+6. `buildInbound()` 下载并解密媒体，生成 `ChannelMsg`。
+7. `createReply()` 生成当前消息对应的 reply helper。
+8. 调用用户传入的 `onMessage(msg, reply)`。
+9. handler 出错会进入 `onError({ phase: 'handler' })`，长轮询继续。
+
+## 状态 schema
+
+| Key | 写入时机 | 读取时机 |
+| --- | --- | --- |
+| `sync_buf` | 成功 `getUpdates` 后 | 下次 `getUpdates` 前 |
+| `ctx:<userId>` | 入站消息携带 `context_token` 时 | 入站消息没有 context token 时作为 fallback |
+| `credentials` | 保留 key，库本体暂未写入 | 调用方可自行使用 |
+
+## 媒体处理
+
+入站媒体会在进入 handler 前完成：
+
+1. 从 CDN 下载加密内容；
+2. 使用协议字段里的 key 解密；
+3. 写入 `mediaTmpDir/<userId>/`；
+4. 在 `msg.media[].path` 中暴露本地文件路径。
+
+这意味着 handler 处理的是已经解密好的本地文件，而不是加密字节。
+
+## 设计原则
+
+- 不绑定 Agent SDK；
+- 不替应用保存业务会话；
+- Store 接口保持最小化；
+- 错误通过 `onError` 暴露，不让单条消息错误拖垮长轮询；
+- 多 Bot 层只做生命周期和凭证管理，不改变单 Bot 的消息语义。

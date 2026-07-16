@@ -1,0 +1,69 @@
+﻿---
+title: 示例项目
+description: Debug Panel 和 Multi Bot 验收脚本。
+---
+
+# 示例项目
+
+仓库内置两个示例，可以直接作为集成参考。
+
+## Debug Panel
+
+路径：
+
+```txt
+examples/debug-panel
+```
+
+功能：
+
+- QR 登录；
+- 通道 start / stop / status；
+- Server-Sent Events 实时推送消息；
+- 文本回复、媒体回复、typing indicator；
+- 文件上传。
+
+运行：
+
+```bash
+pnpm install
+pnpm build
+
+cd examples/debug-panel
+pnpm install
+pnpm dev:all
+```
+
+打开：
+
+```txt
+http://localhost:5173
+```
+
+这个示例的后端是 `createChannel()` 的一层封装：
+
+```txt
+React UI -> Express API/SSE -> ChannelManager -> createChannel -> WeChat
+```
+
+注意：Debug Panel 的消息列表和 pending reply handle 是内存状态，适合调试，不建议直接当生产后端。
+
+## Multi Bot
+
+路径：
+
+```txt
+examples/multi-bot
+```
+
+运行：
+
+```bash
+pnpm build
+
+cd examples/multi-bot
+pnpm install --ignore-workspace
+pnpm verify
+```
+
+这个示例会要求你用两个不同微信号扫码，然后分别向两个 Bot 发消息，验证 `botId` 隔离是否正确。

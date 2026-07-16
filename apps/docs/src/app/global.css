@@ -1,0 +1,50 @@
+﻿@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --font-sans: 'Geist', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-mono: 'Geist Mono', 'Cascadia Code', 'SFMono-Regular', monospace;
+  --wc-ink: 16 24 20;
+  --wc-signal: 31 224 128;
+  --wc-signal-soft: 190 255 220;
+  --wc-panel: 8 13 11;
+}
+
+html {
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+.signal-grid {
+  background-image:
+    linear-gradient(rgba(var(--wc-signal) / 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--wc-signal) / 0.1) 1px, transparent 1px),
+    radial-gradient(circle at 18% 18%, rgba(var(--wc-signal) / 0.22), transparent 34%),
+    radial-gradient(circle at 78% 10%, rgba(94 234 212 / 0.16), transparent 28%),
+    linear-gradient(135deg, rgb(var(--wc-panel)), #06120d 62%, #020504);
+  background-size: 34px 34px, 34px 34px, auto, auto, auto;
+}
+
+.terminal-card {
+  box-shadow:
+    0 0 0 1px rgba(var(--wc-signal) / 0.22),
+    0 24px 80px rgba(0 0 0 / 0.36),
+    inset 0 1px 0 rgba(255 255 255 / 0.08);
+}

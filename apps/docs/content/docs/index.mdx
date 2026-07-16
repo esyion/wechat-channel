@@ -1,0 +1,44 @@
+﻿---
+title: 项目概览
+description: "@esyion/wechat-channel 是一个 agent-agnostic 的微信 ilink 通道库。"
+---
+
+# WeChat Channel
+
+`@esyion/wechat-channel` 是一个面向 Node.js 开发者的微信 ilink 通道库。它把扫码登录、长轮询、媒体加解密、文本/媒体回复、typing 状态和基础会话状态封装成一组 TypeScript API。
+
+这个库的边界很清晰：
+
+- 库负责 WeChat ilink 协议层、长轮询、媒体 I/O、登录和加密；
+- 库负责 `sync_buf` 与 `ctx:<userId>` 这类通道状态；
+- 库不绑定 Claude、OpenAI、RAG 或任何业务工作流；
+- 你的应用只需要在 `onMessage(msg, reply)` 里接入自己的逻辑。
+
+## 适合谁
+
+- 想把微信个人/机器人消息接入 AI 助手的开发者；
+- 想用一个服务托管多个 Bot 的平台方；
+- 想自己控制存储、安全、部署和业务逻辑的团队；
+- 想要最小依赖、可二次封装的 Node.js SDK 使用者。
+
+## 核心 API
+
+| API | 用途 |
+| --- | --- |
+| `loginQR()` | 申请登录二维码，扫码确认后获得 `botToken` 和 `accountId` |
+| `createChannel()` | 创建单 Bot 通道，开始长轮询并在 `onMessage` 中处理消息 |
+| `reply.text()` | 发送文本回复，内部会处理分块 |
+| `reply.media()` | 发送图片、文件或视频 |
+| `reply.typing()` | 发送“正在输入”状态 |
+| `createBotManager()` | 同时托管多个 Bot，用 `botId` 标识来源 |
+| `Store` | 通道状态持久化接口，可替换为 Redis/Postgres 等 |
+| `BotCredentialStore` | 多 Bot 凭证持久化接口，生产环境建议自定义加密存储 |
+
+## 推荐阅读路径
+
+1. 先看 [快速开始](./quick-start)。
+2. 理解 [扫码登录](./login) 和 [通道生命周期](./channel)。
+3. 接入自己的 AI/业务逻辑后，查看 [数据存储](./storage)。
+4. 如果要托管多个微信号，看 [多 Bot](./multi-bot)。
+5. 需要做二次开发时，看 [架构](./architecture) 和 [API 参考](./api-reference)。
+

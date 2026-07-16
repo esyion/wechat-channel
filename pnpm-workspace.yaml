@@ -1,2 +1,15 @@
+packages:
+  - apps/*
+
 allowBuilds:
   esbuild: true
+  sharp: true
+
+overrides:
+  lucide-react: 0.468.0
+  style-to-js: 2.0.2
+
+minimumReleaseAgeExclude:
+  - '@fumadocs/base-ui@16.11.5'
+  - fumadocs-core@16.11.5
+  - fumadocs-mdx@15.2.0

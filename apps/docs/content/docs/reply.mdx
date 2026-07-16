@@ -1,0 +1,65 @@
+﻿---
+title: 回复消息
+description: reply.text、reply.media 和 reply.typing 的使用方式。
+---
+
+# 回复消息
+
+`reply` 是每条入站消息对应的回复 helper。它只在 `onMessage(msg, reply)` 回调里提供。
+
+## 文本回复
+
+```ts
+await reply.text('你好，我收到了');
+```
+
+文本会按最大字符数分块发送。你可以传入 `maxChars`：
+
+```ts
+await reply.text(longAnswer, { maxChars: 4000 });
+```
+
+## 媒体回复
+
+```ts
+await reply.media('/absolute/path/to/photo.png');
+await reply.media('/absolute/path/to/report.pdf', '这是报告');
+```
+
+`reply.media()` 会根据本地文件 MIME 类型走对应的上传和发送流程。传入路径必须是当前 Node.js 进程能读取的本地文件路径。
+
+## 输入状态
+
+```ts
+await reply.typing(true);
+
+// 执行耗时任务
+const answer = await runAgent(msg.text);
+
+await reply.text(answer);
+await reply.typing(false);
+```
+
+建议在耗时 AI 生成或检索任务开始前打开 typing，在结束或失败时关闭。
+
+## 结合 AI Agent
+
+```ts
+onMessage: async (msg, reply) => {
+  await reply.typing(true);
+
+  try {
+    const answer = await agent.invoke({
+      text: msg.text,
+      media: msg.media,
+      userId: msg.fromUserId,
+    });
+
+    await reply.text(answer);
+  } finally {
+    await reply.typing(false);
+  }
+}
+```
+
+这个库不限定你使用什么 Agent SDK。OpenAI、Claude、本地模型、RAG、人工规则都可以在 `onMessage` 里实现。

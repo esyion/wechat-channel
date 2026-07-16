@@ -1,0 +1,95 @@
+﻿---
+title: 快速开始
+description: 5 分钟完成扫码登录、创建通道和收发消息。
+---
+
+# 快速开始
+
+## 1. 安装
+
+```bash
+npm install @esyion/wechat-channel
+```
+
+如果你的项目使用 pnpm：
+
+```bash
+pnpm add @esyion/wechat-channel
+```
+
+要求 Node.js 22 或更高版本。
+
+## 2. 扫码登录获取凭证
+
+```ts
+import { loginQR } from '@esyion/wechat-channel';
+
+const qr = await loginQR();
+
+// 终端场景：输出 ASCII 二维码
+console.log(qr.toTerminal());
+
+// Web 场景：也可以渲染成 data URL
+// const src = await qr.toDataURL({ size: 400 });
+
+const { botToken, accountId } = await qr.waitForLogin();
+
+// 生产环境请存到安全位置，例如加密数据库、KMS 或 secret manager
+console.log({ botToken, accountId });
+```
+
+## 3. 创建通道
+
+```ts
+import { createChannel } from '@esyion/wechat-channel';
+
+const channel = await createChannel({
+  botToken: process.env.WECHAT_BOT_TOKEN!,
+  accountId: process.env.WECHAT_ACCOUNT_ID!,
+  onMessage: async (msg, reply) => {
+    console.log('from:', msg.fromUserId);
+    console.log('text:', msg.text);
+
+    await reply.text(`你说了：${msg.text}`);
+  },
+});
+
+await channel.start();
+```
+
+## 4. 优雅退出
+
+```ts
+const ac = new AbortController();
+
+process.on('SIGINT', () => ac.abort());
+
+await channel.start({ signal: ac.signal });
+```
+
+也可以在你的服务关闭逻辑里手动调用：
+
+```ts
+await channel.stop();
+```
+
+`stop()` 会通知 WeChat 下线并调用 `store.flush()`，确保挂起的状态写入完成。
+
+## 5. 运行示例面板
+
+仓库内置了一个 React + Express 的 Debug Panel：
+
+```bash
+pnpm install
+pnpm build
+
+cd examples/debug-panel
+pnpm install
+pnpm dev:all
+```
+
+启动后打开：
+
+```txt
+http://localhost:5173
+```

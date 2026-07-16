@@ -1,0 +1,64 @@
+﻿---
+title: 多 Bot 托管
+description: 使用 createBotManager 同时管理多个微信号。
+---
+
+# 多 Bot 托管
+
+当一套服务需要同时接入多个微信号时，用 `createBotManager()`。它是 `createChannel()` 之上的薄管理层：每个 Bot 对应一个 `botId`，所有消息进入同一个全局 `onMessage`，第一个参数标识来源。
+
+## 基础用法
+
+```ts
+import { createBotManager, loginQR } from '@esyion/wechat-channel';
+
+const manager = createBotManager({
+  onMessage: async (botId, msg, reply) => {
+    console.log(`[${botId}] ${msg.text}`);
+    await reply.text(`收到，你是 ${botId}`);
+  },
+  onError: (botId, err, ctx) => {
+    console.error(`[${botId}]`, ctx?.phase, err);
+  },
+});
+
+await manager.startAll();
+
+const qr = await loginQR();
+console.log(qr.toTerminal());
+
+const creds = await qr.waitForLogin();
+await manager.add('bot-a', creds);
+```
+
+## API
+
+| 方法 | 说明 |
+| --- | --- |
+| `add(botId, creds)` | 保存凭证并启动一个 Bot |
+| `remove(botId, { purge })` | 停止 Bot；`purge` 为 true 时删除凭证 |
+| `list()` | 查看当前 Bot 状态 |
+| `get(botId)` | 获取底层 `ChannelHandle` |
+| `startAll()` | 从凭证存储恢复全部 Bot |
+| `stopAll()` | 停止全部 Bot |
+
+## 状态隔离
+
+默认情况下，每个 Bot 会有自己的状态目录：
+
+```txt
+<stateDir>/bots/<botId>/store.json
+<stateDir>/bots/<botId>/media/
+```
+
+这样 `sync_buf` 与 `ctx:<userId>` 不会在不同 Bot 之间混用。
+
+## 凭证安全
+
+默认 `JsonBotCredentialStore` 会写入：
+
+```txt
+<stateDir>/bots.json
+```
+
+里面包含敏感的 `botToken`。生产环境请实现自己的 `BotCredentialStore`，并把 token 加密后写入数据库或密钥系统。

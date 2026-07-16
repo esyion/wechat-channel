@@ -1,0 +1,47 @@
+﻿---
+title: 扫码登录
+description: 使用 loginQR() 获取二维码并等待手机确认。
+---
+
+# 扫码登录
+
+登录阶段不需要已有 token。调用 `loginQR()` 后会返回一个 `QRLoginHandle`，你可以把二维码渲染到终端、网页或文件。
+
+## 基础用法
+
+```ts
+import { loginQR } from '@esyion/wechat-channel';
+
+const qr = await loginQR();
+console.log(qr.toTerminal());
+
+const result = await qr.waitForLogin({ timeoutMs: 120_000 });
+
+console.log(result.botToken);
+console.log(result.accountId);
+```
+
+## 渲染方式
+
+| 方法 | 适用场景 |
+| --- | --- |
+| `toTerminal()` | SSH、CLI、服务器终端 |
+| `toDataURL()` | Web 页面 `<img src>` |
+| `toSvg()` | 内联 SVG |
+| `toPng()` | 写入 PNG 文件或转发给其他系统 |
+| `matrix` | 自定义二维码渲染 |
+
+## 取消等待
+
+```ts
+const ac = new AbortController();
+const qr = await loginQR();
+
+setTimeout(() => ac.abort(), 60_000);
+
+await qr.waitForLogin({ signal: ac.signal });
+```
+
+## 凭证安全
+
+`botToken` 是敏感登录态。单 Bot 场景下，库不会自动替你保存凭证；你需要自己保存 `botToken` 与 `accountId`。多 Bot 场景下，默认的 `JsonBotCredentialStore` 会把凭证明文写入 `bots.json`，生产环境建议替换为加密存储。

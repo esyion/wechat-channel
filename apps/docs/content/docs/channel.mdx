@@ -1,0 +1,89 @@
+﻿---
+title: 创建通道
+description: createChannel() 的核心参数、生命周期和错误处理。
+---
+
+# 创建通道
+
+`createChannel()` 是单 Bot 接入的主入口。它会创建 ilink API client、Store、媒体临时目录和长轮询循环。
+
+## 参数
+
+```ts
+const channel = await createChannel({
+  botToken,
+  accountId,
+  onMessage,
+  onError,
+  store,
+  stateDir,
+  mediaTmpDir,
+  blockedUsers,
+});
+```
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `botToken` | 是 | 登录后拿到的微信机器人令牌 |
+| `accountId` | 是 | 登录后拿到的 ilink bot id |
+| `onMessage` | 否 | 收到消息后的回调 |
+| `onError` | 否 | 错误回调，包含 `phase` |
+| `store` | 否 | 自定义通道状态存储 |
+| `stateDir` | 否 | 默认状态目录，默认 `~/.wechat-channel` |
+| `mediaTmpDir` | 否 | 入站媒体解密后的临时目录 |
+| `blockedUsers` | 否 | 需要忽略的用户 ID 集合 |
+
+## onMessage
+
+```ts
+onMessage: async (msg, reply) => {
+  if (!msg.text.trim()) return;
+
+  await reply.typing(true);
+
+  try {
+    const answer = await runYourAgent(msg.text, {
+      userId: msg.fromUserId,
+      contextToken: msg.contextToken,
+      media: msg.media,
+    });
+
+    await reply.text(answer);
+  } finally {
+    await reply.typing(false);
+  }
+}
+```
+
+## onError
+
+```ts
+onError: (err, ctx) => {
+  switch (ctx?.phase) {
+    case 'sessionExpired':
+      console.error('登录态过期，需要重新扫码', err);
+      break;
+    case 'inbound':
+      console.error('入站媒体下载或解密失败', err);
+      break;
+    case 'handler':
+      console.error('业务回调失败', err);
+      break;
+    default:
+      console.error('通道错误', ctx?.phase, err);
+  }
+}
+```
+
+长轮询循环不会因为单条消息处理失败而直接退出；handler 错误会进入 `onError({ phase: 'handler' })`，然后继续处理下一条消息。
+
+## 生命周期
+
+```ts
+const channel = await createChannel(opts);
+
+await channel.start();
+await channel.stop();
+```
+
+`start()` 会启动长轮询；`stop()` 会 abort 当前循环、通知 WeChat 下线并 flush 存储。
